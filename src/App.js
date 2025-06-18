@@ -1,10 +1,18 @@
-import React from 'react';
+
+import React, { useState } from 'react';
+import SmoothieGenerator from './components/SmoothieGenerator';
+import SmoothieResult from './components/SmoothieResult';
+import './App.css';
 
 function App() {
+  const [smoothie, setSmoothie] = useState(null);
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-green-100 text-center p-4">
-      <h1 className="text-4xl font-bold text-green-800">Nature’s Elixirz</h1>
-      <p className="text-lg mt-2 text-green-700">Heal N Blend Smoothie Generator</p>
+    <div className="App">
+      <h1>Nature’s Elixirz</h1>
+      <p>Heal N Blend Smoothie Generator</p>
+      <SmoothieGenerator onGenerate={setSmoothie} />
+      {smoothie && <SmoothieResult smoothie={smoothie} />}
     </div>
   );
 }
