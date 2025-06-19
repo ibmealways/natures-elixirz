@@ -1,28 +1,39 @@
 import React, { useState } from "react";
 import IngredientPicker from "./components/IngredientPicker";
+import ResultDisplay from "./components/ResultDisplay";
 import SmoothieGenerator from "./components/SmoothieGenerator";
-import ResultCard from "./components/ResultCard";
 
 function App() {
   const [selectedIngredients, setSelectedIngredients] = useState([]);
-  const [smoothieResult, setSmoothieResult] = useState(null);
+  const [smoothie, setSmoothie] = useState(null);
 
-  const generateSmoothie = () => {
-    setSmoothieResult(selectedIngredients);
+  const handleSelect = (ingredient) => {
+    setSelectedIngredients((prev) =>
+      prev.includes(ingredient)
+        ? prev.filter((item) => item !== ingredient)
+        : [...prev, ingredient]
+    );
+  };
+
+  const handleGenerate = () => {
+    const generated = SmoothieGenerator(selectedIngredients);
+    setSmoothie(generated);
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <h1 className="text-3xl font-bold text-center mb-4">Nature’s Elixirz</h1>
-      <IngredientPicker
-        selectedIngredients={selectedIngredients}
-        setSelectedIngredients={setSelectedIngredients}
-      />
-      <SmoothieGenerator
-        selectedIngredients={selectedIngredients}
-        generateSmoothie={generateSmoothie}
-      />
-      <ResultCard smoothie={smoothieResult} />
+    <div style={{ textAlign: "center", padding: "2rem" }}>
+      <h1 style={{ color: "#2e7d32" }}>🌿 Nature’s Elixirz</h1>
+      <IngredientPicker onSelect={handleSelect} />
+      <div style={{ marginTop: "1rem" }}>
+        <h2>Selected Ingredients</h2>
+        <ul>
+          {selectedIngredients.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        <button onClick={handleGenerate}>Generate Smoothie</button>
+      </div>
+      {smoothie && <ResultDisplay result={smoothie} />}
     </div>
   );
 }
