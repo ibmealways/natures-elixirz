@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import IngredientPicker from "./components/IngredientPicker";
 import ResultDisplay from "./components/ResultDisplay";
 import SmoothieGenerator from "./components/SmoothieGenerator";
+import "./App.css";
 
 function App() {
   const [selectedIngredients, setSelectedIngredients] = useState([]);
