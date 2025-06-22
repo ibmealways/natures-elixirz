@@ -13,7 +13,7 @@ function IngredientPicker({ selectedIngredients, onSelect }) {
             className={selectedIngredients.includes(item) ? 'selected' : ''}
             onClick={() => onSelect(item)}
           >
-            {item}
+            {item} — <span className="text-sm text-gray-500">{benefit}</span>       
           </button>
         ))}
       </div>
