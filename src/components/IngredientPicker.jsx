@@ -7,13 +7,14 @@ function IngredientPicker({ selectedIngredients, onSelect }) {
     <div className="ingredient-picker">
       <h2>🌿 Pick Your Ingredients</h2>
       <div className="ingredient-list">
-        {Object.keys(ingredients).map(item => (
+        {Object.entries(ingredients).map(([item, benefit]) => (
           <button
             key={item}
-            className={selectedIngredients.includes(item) ? 'selected' : ''}
+            className={`ingredient-button ${selectedIngredients.includes(item) ? 'selected' : ''}`}
             onClick={() => onSelect(item)}
           >
-            {item} — <span className="text-sm text-gray-500">{benefit}</span>       
+            <div className="font-semibold">{item}</div>
+            <div className="text-sm text-gray-500">{benefit}</div>
           </button>
         ))}
       </div>
@@ -22,4 +23,5 @@ function IngredientPicker({ selectedIngredients, onSelect }) {
 }
 
 export default IngredientPicker;
+
 
