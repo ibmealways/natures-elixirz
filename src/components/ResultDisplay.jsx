@@ -1,55 +1,41 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-function ResultDisplay() {
-  const [fruits, setFruits] = useState(['']);
-  const [vegetables, setVegetables] = useState(['']);
-  const [seeds, setSeeds] = useState(['']);
-  const [spices, setSpices] = useState(['']);
-
-  const handleChange = (setFunc, index, value) => {
-    setFunc(prev => {
-      const updated = [...prev];
-      updated[index] = value;
-      return updated;
-    });
-  };
-
-  const addField = (setFunc) => {
-    setFunc(prev => [...prev, '']);
-  };
-
-  const renderInputGroup = (label, values, setFunc, btnText) => (
-    <div className="mb-4 w-full">
-      <h3 className="text-center text-lg font-semibold mb-2">{label}</h3>
-      <div className="flex flex-wrap justify-center gap-2">
-        {values.map((val, idx) => (
-          <input
-            key={idx}
-            value={val}
-            onChange={e => handleChange(setFunc, idx, e.target.value)}
-            className="border p-2 rounded-md w-[150px]"
-            placeholder={`Enter ${label.toLowerCase()} #${idx + 1}`}
-          />
-        ))}
-        <button
-          onClick={() => addField(setFunc)}
-          className="bg-green-400 text-white px-3 py-1 rounded-md hover:bg-green-500"
-        >
-          + Add more {btnText}
-        </button>
-      </div>
-    </div>
-  );
-
+function ResultDisplay({ smoothie }) {
   return (
-    <div className="bg-white shadow-xl rounded-xl p-6 w-full max-w-5xl mx-auto mt-10 text-center">
-      <h2 className="text-2xl font-bold text-green-800 mb-4">🥤 Your Smoothie Output</h2>
-      <p className="text-gray-600 mb-6">Select ingredients and generate your smoothie blend.</p>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-4">
-        {renderInputGroup('Fruits', fruits, setFruits, 'fruits')}
-        {renderInputGroup('Vegetables', vegetables, setVegetables, 'vegetables')}
-        {renderInputGroup('Seeds', seeds, setSeeds, 'seeds')}
-        {renderInputGroup('Spices', spices, setSpices, 'spices')}
+    <div className="flex justify-center mt-8">
+      <div className="bg-white shadow-2xl rounded-2xl p-6 w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-6 text-gray-800">
+        <div>
+          <h3 className="text-xl font-bold mb-3 text-green-700">🍓 Fruits</h3>
+          <ul className="list-disc list-inside space-y-1">
+            {smoothie.fruits.map((item, idx) => (
+              <li key={`fruit-${idx}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="text-xl font-bold mb-3 text-green-700">🥦 Vegetables</h3>
+          <ul className="list-disc list-inside space-y-1">
+            {smoothie.vegetables.map((item, idx) => (
+              <li key={`veg-${idx}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="text-xl font-bold mb-3 text-green-700">🌰 Seeds</h3>
+          <ul className="list-disc list-inside space-y-1">
+            {smoothie.seeds.map((item, idx) => (
+              <li key={`seed-${idx}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="text-xl font-bold mb-3 text-green-700">🧂 Spices</h3>
+          <ul className="list-disc list-inside space-y-1">
+            {smoothie.spices.map((item, idx) => (
+              <li key={`spice-${idx}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );
