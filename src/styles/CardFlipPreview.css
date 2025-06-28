@@ -1,26 +1,44 @@
 /* src/styles/CardFlipPreview.css */
-.flip-container {
-  perspective: 1000px;
-  cursor: pointer;
-}
-.flipper {
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-  position: relative;
-}
-.flipped {
-  transform: rotateY(180deg);
-}
-.front, .back {
-  backface-visibility: hidden;
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-}
-.back {
-  transform: rotateY(180deg);
-}
 .card-container {
   perspective: 1000px;
+}
+
+.card {
+  width: 300px;
+  height: 200px;
+  transition: transform 0.8s;
+  transform-style: preserve-3d;
+  position: relative;
+  margin: 0 auto;
+  cursor: pointer;
+}
+
+.card:hover {
+  transform: rotateY(180deg);
+}
+
+.card-front,
+.card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.card-front {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.card-back {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  transform: rotateY(180deg);
 }
 
 .alchemy-glow {
@@ -32,36 +50,4 @@
 @keyframes alchemyPulse {
   0%, 100% { box-shadow: 0 0 10px #4ade80; }
   50% { box-shadow: 0 0 25px #86efac; }
-}
-
-.card {
-  width: 300px;
-  height: 200px;
-  transition: transform 0.8s;
-  transform-style: preserve-3d;
-  cursor: pointer;
-  animation: alchemyPulse 3s infinite;
-}
-
-.card-inner.flipped {
-  transform: rotateY(180deg);
-}
-
-.card-front,
-.card-back {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  border-radius: 1rem;
-  background-color: #f0fdf4;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-}
-
-.card-back {
-  transform: rotateY(180deg);
 }
