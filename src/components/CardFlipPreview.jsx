@@ -26,10 +26,6 @@ export default function CardFlipPreview({ blend }) {
   );
 }
 
-.card-container {
-  perspective: 1000px;
-}
-
 .card {
   width: 300px;
   height: 200px;

@@ -23,6 +23,17 @@
   perspective: 1000px;
 }
 
+.alchemy-glow {
+  animation: alchemyPulse 3s ease-in-out infinite;
+  border-radius: 12px;
+  box-shadow: 0 0 15px #86efac;
+}
+
+@keyframes alchemyPulse {
+  0%, 100% { box-shadow: 0 0 10px #4ade80; }
+  50% { box-shadow: 0 0 25px #86efac; }
+}
+
 .card {
   width: 300px;
   height: 200px;
