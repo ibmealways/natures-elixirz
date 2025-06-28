@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import IngredientPicker from "./components/IngredientPicker";
 import ResultDisplay from "./components/ResultDisplay";
 import SmoothieGenerator from "./components/SmoothieGenerator";
+import "./App.css";
 
 function App() {
   const [selectedIngredients, setSelectedIngredients] = useState([]);
   const [smoothie, setSmoothie] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
 
   const handleSelect = (ingredient) => {
     setSelectedIngredients((prev) =>
@@ -21,23 +23,40 @@ function App() {
   };
 
   return (
-    <div style={{ textAlign: "center", padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1 style={{ color: "#2e7d32" }}>🌿 Nature’s Elixirz</h1>
-      <IngredientPicker onSelect={handleSelect} />
-      
-      <div style={{ marginTop: "1rem" }}>
-        <h2>Selected Ingredients</h2>
-        <ul>
-          {selectedIngredients.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <button onClick={handleGenerate}>Generate Smoothie</button>
-      </div>
+    <div className={darkMode ? "dark bg-gray-900 text-white min-h-screen" : "bg-white text-gray-900 min-h-screen"}>
+      {/* 🌗 Toggle Button */}
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        className="fixed top-4 right-4 z-50 px-4 py-2 bg-yellow-400 dark:bg-gray-700 text-black dark:text-white rounded-md shadow-lg"
+      >
+        {darkMode ? '🌞 Light Mode' : '🌙 Dark Mode'}
+      </button>
 
-      {smoothie && <ResultDisplay result={smoothie} />}
+      {/* App Content */}
+      <div className="app-wrapper p-4 text-center font-sans">
+        <h1 className="text-green-700 text-4xl mb-6">🌿 Nature’s Elixirz</h1>
+        <IngredientPicker onSelect={handleSelect} />
+
+        <div className="mt-6">
+          <h2 className="text-2xl font-bold mb-2">Selected Ingredients</h2>
+          <ul className="space-y-1">
+            {selectedIngredients.map((item) => (
+              <li key={item} className="capitalize">{item}</li>
+            ))}
+          </ul>
+          <button
+            onClick={handleGenerate}
+            className="mt-4 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded shadow transition"
+          >
+            Generate Smoothie
+          </button>
+        </div>
+
+        {smoothie && <ResultDisplay result={smoothie} />}
+      </div>
     </div>
   );
 }
 
-export default App; // Trigger redeploy 🚀
+export default App;
+

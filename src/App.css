@@ -1,18 +1,26 @@
+/* src/App.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
 body {
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f6faf9;
-  margin: 0;
-  padding: 0;
+  @apply bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200;
 }
 
-h1 {
-  color: #2f855a;
-  text-align: center;
-  padding-top: 2rem;
+.container {
+  @apply max-w-4xl mx-auto p-4;
 }
 
-p {
-  text-align: center;
-  font-size: 1.1rem;
-  color: #4a5568;
+@keyframes alchemyPulse {
+  0% { box-shadow: 0 0 5px 2px #4ade80; }
+  50% { box-shadow: 0 0 15px 4px #86efac; }
+  100% { box-shadow: 0 0 5px 2px #4ade80; }
+}
+
+.alchemy-glow {
+  animation: alchemyPulse 3s ease-in-out infinite;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #e0f7ec, #d2f5dd);
+  box-shadow: 0 0 10px rgba(74, 222, 178, 0.4);  
 }

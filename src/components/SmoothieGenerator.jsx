@@ -1,56 +1,52 @@
+// src/components/SmoothieGenerator.jsx
 import React, { useState } from 'react';
 import IngredientPicker from './IngredientPicker';
 import ResultDisplay from './ResultDisplay';
 import generateSmoothie from '../utilities/generateSmoothie';
-import '../App.css';
 
-function SmoothieGenerator() {
-  const [selectedIngredients, setSelectedIngredients] = useState([]);
+export default function SmoothieGenerator() {
+  const [selected, setSelected] = useState({
+    fruits: [],
+    vegetables: [],
+    seeds: [],
+    spices: [],
+  });
   const [smoothie, setSmoothie] = useState(null);
 
-  const handleSelect = (ingredient) => {
-    setSelectedIngredients((prev) =>
-      prev.includes(ingredient)
-        ? prev.filter((i) => i !== ingredient)
-        : [...prev, ingredient]
-    );
+  const handleSelect = (category, item) => {
+    setSelected(prev => ({
+      ...prev,
+      [category]: prev[category].includes(item)
+        ? prev[category].filter(i => i !== item)
+        : [...prev[category], item],
+    }));
   };
 
   const handleGenerate = () => {
-    // 🧠 BONUS: Sort ingredients before generating for consistency
-    const sortedIngredients = [...selectedIngredients].sort();
-    const result = generateSmoothie(sortedIngredients);
-    setSmoothie(result);
+    setSmoothie(generateSmoothie(selected));
   };
 
   return (
     <div className="smoothie-generator text-center mt-8">
       <h1 className="text-3xl font-bold text-green-700 mb-4">🌿 Nature’s Elixirz</h1>
 
-      <IngredientPicker
-        selectedIngredients={selectedIngredients}
-        onSelect={handleSelect}
-      />
+      {['fruits', 'vegetables', 'seeds', 'spices'].map(category => (
+        <IngredientPicker
+          key={category}
+          category={category}
+          selected={selected[category]}
+          onSelect={item => handleSelect(category, item)}
+        />
+      ))}
 
-      <div className="selection mt-6">
-        <h3 className="text-xl font-semibold mb-2">Selected Ingredients</h3>
-        <ul className="list-disc list-inside text-gray-700">
-          {[...selectedIngredients].sort().map((ingredient, index) => (
-            <li key={index}>{ingredient}</li>
-          ))}
-        </ul>
-
-        <button
-          onClick={handleGenerate}
-          className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow"
-        >
-          Generate Smoothie
-        </button>
-      </div>
+      <button
+        onClick={handleGenerate}
+        className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow transition"
+      >
+        Generate Smoothie
+      </button>
 
       <ResultDisplay smoothie={smoothie} />
     </div>
   );
 }
-
-export default SmoothieGenerator;
