@@ -2,8 +2,7 @@ import React from 'react';
 import ingredients from '../data/ingredients.json';
 import '../App.css';
 
-function IngredientPicker({ category, ingredients = [], selected, onSelect }) { ... }
-
+function IngredientPicker({ category, ingredients = [], selected = [], onSelect }) {
   return (
     <div className="ingredient-picker">
       <h2>🌿 Pick Your Ingredients</h2>
@@ -11,7 +10,7 @@ function IngredientPicker({ category, ingredients = [], selected, onSelect }) { 
         {Object.entries(ingredients).map(([item, benefit]) => (
           <button
             key={item}
-            className={`ingredient-button ${selectedIngredients.includes(item) ? 'selected' : ''}`}
+            className={`ingredient-button ${selected.includes(item) ? 'selected' : ''}`}
             onClick={() => onSelect(item)}
           >
             <div className="font-semibold">{item}</div>
@@ -24,5 +23,9 @@ function IngredientPicker({ category, ingredients = [], selected, onSelect }) { 
 }
 
 export default IngredientPicker;
+
+
+
+
 
 
