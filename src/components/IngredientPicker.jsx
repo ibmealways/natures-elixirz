@@ -2,7 +2,8 @@ import React from 'react';
 import ingredients from '../data/ingredients.json';
 import '../App.css';
 
-function IngredientPicker({ selectedIngredients, onSelect }) {
+function IngredientPicker({ category, ingredients = [], selected, onSelect }) { ... }
+
   return (
     <div className="ingredient-picker">
       <h2>🌿 Pick Your Ingredients</h2>
