@@ -3,27 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
+
     <!-- ✅ Title -->
     <title>Nature’s Elixirz: Heal N Blend</title>
 
     <!-- ✅ Meta Description -->
-    <meta name="description" content="Discover healing smoothie blends, curated for wellness, longevity, and vibrant energy. Nature’s Elixirz, your daily dose of Earth-powered vitality." />
+    <meta
+      name="description"
+      content="Discover healing smoothie blends, curated for wellness, longevity, and vibrant energy. Nature’s Elixirz, your daily dose of Earth-powered vitality."
+    />
 
     <!-- ✅ Favicon -->
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
 
-    <!-- ✅ Open Graph Tags -->
+    <!-- ✅ Open Graph Tags for Social Media Sharing -->
     <meta property="og:title" content="Nature’s Elixirz: Heal N Blend" />
-    <meta property="og:description" content="Vibrationally tuned smoothie blends for health and energy." />
+    <meta
+      property="og:description"
+      content="Vibrationally tuned smoothie blends for health and energy."
+    />
     <meta property="og:image" content="%PUBLIC_URL%/social-preview.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://natureselixirz.com" />
 
     <!-- ✅ Theme Color for Mobile -->
     <meta name="theme-color" content="#79d99d" />
   </head>
 
   <body>
+    <!-- ✅ SEO Fallback: Banner visible for non-JS or search engines -->
+    <div style="text-align: center; margin: 40px auto;">
+      <a
+        href="https://natureselixirz.com"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <img
+          src="%PUBLIC_URL%/banner/banner-preview.gif"
+          alt="Nature’s Elixirz App Launch Banner"
+          style="max-width: 90%; border-radius: 14px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);"
+        />
+      </a>
+      <br />
+      <a
+        href="https://natureselixirz.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        style="
+          display: inline-block;
+          margin-top: 18px;
+          padding: 12px 24px;
+          background-color: #3ab676;
+          color: white;
+          font-weight: bold;
+          text-decoration: none;
+          border-radius: 8px;
+          box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+        "
+      >
+        🚀 Launch the Smoothie App
+      </a>
+    </div>
+
+    <!-- ✅ React Root Mount Point -->
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>
 </html>
+
+
