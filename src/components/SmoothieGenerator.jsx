@@ -1,52 +1,51 @@
-// src/components/SmoothieGenerator.jsx
 import React, { useState } from 'react';
 import IngredientPicker from './IngredientPicker';
 import ResultDisplay from './ResultDisplay';
 import generateSmoothie from '../utilities/generateSmoothie';
+import ingredients from '../data/ingredients.json';
 
-export default function SmoothieGenerator() {
-  const [selected, setSelected] = useState({
-    fruits: [],
-    vegetables: [],
-    seeds: [],
-    spices: [],
-  });
+export default function SmoothieGenerator({ onBlendGenerated }) {
+  const [selected, setSelected] = useState([]);
   const [smoothie, setSmoothie] = useState(null);
 
-  const handleSelect = (category, item) => {
-    setSelected(prev => ({
-      ...prev,
-      [category]: prev[category].includes(item)
-        ? prev[category].filter(i => i !== item)
-        : [...prev[category], item],
-    }));
+  const handleSelect = (item) => {
+    setSelected((prev) =>
+      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]
+    );
   };
 
   const handleGenerate = () => {
-    setSmoothie(generateSmoothie(selected));
+    const blend = generateSmoothie(selected);
+    setSmoothie(blend);
+    onBlendGenerated(blend);
   };
 
   return (
-    <div className="smoothie-generator text-center mt-8">
-      <h1 className="text-3xl font-bold text-green-700 mb-4">🌿 Nature’s Elixirz</h1>
+    <div className="smoothie-generator bg-gradient-to-b from-green-100 to-green-50 dark:from-gray-800 dark:to-gray-900 p-10 rounded-xl shadow-2xl max-w-3xl mx-auto my-12 border border-green-300 dark:border-green-600 animate-fadeIn">
+      <h1 className="text-5xl font-extrabold mb-8 text-green-700 dark:text-green-300 tracking-tight animate-pulse">
+        🌿 Nature’s Elixirz
+      </h1>
 
-      {['fruits', 'vegetables', 'seeds', 'spices'].map(category => (
-        <IngredientPicker
-          key={category}
-          category={category}
-          selected={selected[category]}
-          onSelect={item => handleSelect(category, item)}
-        />
-      ))}
+      <IngredientPicker
+        ingredients={ingredients}
+        selected={selected}
+        onSelect={handleSelect}
+      />
 
       <button
         onClick={handleGenerate}
-        className="mt-4 px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow transition"
+        className="mt-8 px-8 py-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-bold rounded-full shadow-lg transition-transform transform hover:scale-105 animate-bounce"
       >
-        Generate Smoothie
+        🍹 Generate My Elixir
       </button>
 
-      <ResultDisplay smoothie={smoothie} />
+      {smoothie && (
+        <div className="mt-10">
+          <ResultDisplay smoothie={smoothie} />
+        </div>
+      )}
     </div>
   );
 }
+
+

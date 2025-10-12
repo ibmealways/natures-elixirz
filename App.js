@@ -3,6 +3,7 @@ import IngredientPicker from "./components/IngredientPicker";
 import ResultDisplay from "./components/ResultDisplay";
 import SmoothieGenerator from "./components/SmoothieGenerator";
 import "./App.css";
+import './styles/tailwind.css';
 
 function App() {
   const [selectedIngredients, setSelectedIngredients] = useState([]);

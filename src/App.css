@@ -1,17 +1,19 @@
-/* src/App.css */
+/* Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
+/* General styling for light/dark mode */
 body {
   @apply bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200;
 }
 
+/* Container styling */
 .container {
   @apply max-w-4xl mx-auto p-4;
 }
 
+/* Alchemy Glow Animation */
 @keyframes alchemyPulse {
   0% { box-shadow: 0 0 5px 2px #4ade80; }
   50% { box-shadow: 0 0 15px 4px #86efac; }
@@ -23,4 +25,14 @@ body {
   border-radius: 12px;
   background: linear-gradient(145deg, #e0f7ec, #d2f5dd);
   box-shadow: 0 0 10px rgba(74, 222, 178, 0.4);  
+}
+
+/* Flip Animation */
+@keyframes flip {
+  from { transform: rotateY(0); }
+  to { transform: rotateY(360deg); }
+}
+
+.animate-flip {
+  animation: flip 1s ease-in-out;
 }
