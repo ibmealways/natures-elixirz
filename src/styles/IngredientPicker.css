@@ -1,0 +1,283 @@
+/* ------------------------------------------------------------
+   COSMIC INGREDIENT PICKER — FINAL MASTER EDITION
+------------------------------------------------------------- */
+
+/* ------------------------------------------------------------
+   CATEGORY PILL NAV
+------------------------------------------------------------- */
+
+.category-pill {
+  padding: 0.55rem 1.4rem;
+  font-size: 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgb(167 243 208);
+  backdrop-filter: blur(6px);
+  transition: 0.35s ease;
+  position: relative;
+  z-index: 5;
+}
+
+.category-pill:hover {
+  background: rgba(16, 185, 129, 0.18);
+  transform: translateY(-2px);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
+}
+
+.category-pill.active {
+  background: rgba(16, 185, 129, 1);
+  color: #000;
+  border-color: rgba(16, 185, 129, 1);
+  transform: scale(1.06);
+  box-shadow:
+    0 0 25px rgba(16, 185, 129, 0.85),
+    inset 0 0 12px rgba(16, 185, 129, 0.8);
+}
+
+/* SLIDING GLOW BEHIND CATEGORY TABS */
+.category-slider {
+  width: 60%;
+  height: 130%;
+  background: radial-gradient(
+    circle at center,
+    rgba(16, 185, 129, 0.12),
+    transparent 65%
+  );
+  filter: blur(40px);
+  border-radius: 50%;
+  animation: cosmic-slider-move 8s infinite ease-in-out;
+}
+
+@keyframes cosmic-slider-move {
+  0% { transform: translateX(-25%); }
+  50% { transform: translateX(25%); }
+  100% { transform: translateX(-25%); }
+}
+
+/* ------------------------------------------------------------
+   INGREDIENT GRID CARDS — ULTRA COSMIC STYLE
+------------------------------------------------------------- */
+
+.ingredient-card {
+  padding: 0.9rem;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  color: rgb(209 250 229);
+  text-align: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: 0.28s ease;
+  backdrop-filter: blur(5px);
+  position: relative;
+}
+
+.ingredient-card:hover {
+  background: rgba(16, 185, 129, 0.15);
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 14px rgba(45, 212, 191, 0.35),
+    0 0 22px rgba(16, 185, 129, 0.35);
+}
+
+/* SELECTED STATE — NEON LOCK-IN */
+.ingredient-active {
+  background: rgba(16, 185, 129, 1) !important;
+  color: #000 !important;
+  border-color: rgba(16, 185, 129, 1) !important;
+  transform: scale(1.06);
+  box-shadow:
+    0 0 25px rgba(16, 185, 129, 0.85),
+    inset 0 0 18px rgba(16, 185, 129, 0.9);
+}
+
+/* ------------------------------------------------------------
+   GLOW INTENSITY FOR SEARCH MATCHES
+------------------------------------------------------------- */
+
+/* No Glow */
+.glow-none {}
+
+/* Soft match */
+.glow-medium {
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+/* Strong match — name starts with search term */
+.glow-strong {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
+  transform: scale(1.02);
+}
+
+/* ------------------------------------------------------------
+   SEARCH TERM HOLOGRAPHIC HIGHLIGHT
+------------------------------------------------------------- */
+
+.neon-highlight {
+  color: #34f5c5;
+  text-shadow:
+    0 0 8px rgba(52, 245, 197, 0.9),
+    0 0 14px rgba(16, 185, 129, 0.5);
+  border-bottom: 1px solid rgba(52, 245, 197, 0.6);
+}
+
+/* ------------------------------------------------------------
+   COSMIC UTILITY EFFECTS
+------------------------------------------------------------- */
+
+/* Pulse on activation */
+@keyframes cosmic-pulse {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.ingredient-active {
+  animation: cosmic-pulse 0.35s ease-out;
+}
+
+/* Optional shimmer coating */
+.ingredient-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: radial-gradient(
+    circle at 50% -20%,
+    rgba(52, 211, 153, 0.15),
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0.2;
+}
+
+/* Optional soft mist */
+.ingredient-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 100%,
+    rgba(16, 185, 129, 0.08),
+    transparent 70%
+  );
+  filter: blur(18px);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------
+   PHASE 4: CONSCIOUS GRID UPGRADE
+---------------------------------------------------------- */
+
+/* Layout helper */
+.cosmic-grid {
+  position: relative;
+  z-index: 1;
+}
+
+/* Subtle aura on each tile */
+.ingredient-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ingredient-aura {
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(
+    circle at 50% 0%,
+    rgba(16, 185, 129, 0.35),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+/* URS badge */
+.resonance-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.9);
+  background: linear-gradient(
+    135deg,
+    rgba(45, 212, 191, 1),
+    rgba(56, 189, 248, 1)
+  );
+  padding: 4px 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.75);
+}
+
+/* Mini benefit subtitle */
+.ingredient-benefit {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+  color: #ccfbf1;
+}
+
+/* Synergy intensity */
+.synergy-light .ingredient-aura {
+  opacity: 0.3;
+}
+
+.synergy-medium .ingredient-aura {
+  opacity: 0.55;
+}
+
+.synergy-strong .ingredient-aura {
+  opacity: 0.85;
+}
+
+/* Ripple when selected */
+@keyframes ingredient-ripple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.ingredient-card.ripple.selected {
+  animation: ingredient-ripple 1.7s ease-out infinite;
+}
+
+/* Make selected state extra crisp */
+.ingredient-card.selected {
+  transform: translateY(-3px) scale(1.02);
+  background: radial-gradient(
+      circle at 0% 0%,
+      rgba(45, 212, 191, 0.4),
+      transparent 55%
+    ),
+    linear-gradient(145deg, #10b981, #064e3b);
+  color: #ecfdf5;
+  border-color: #6ee7b7;
+}
+
+/* Phase 2: Light hologram consistency */
+
+.category-pill.active {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
+}
+
+.ingredient-card {
+  transition: transform 0.25s ease, box-shadow 0.3s ease;
+}
+
+.ingredient-card:hover {
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0px 0px 22px rgba(16, 185, 129, 0.45);
+}

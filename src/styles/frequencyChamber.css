@@ -1,0 +1,262 @@
+/* ===========================================
+   Nature's Elixirz • Galactic Frequency Chamber
+   Parallax Stars • Rippling Nebula • Scan Lines
+   =========================================== */
+
+/* Fullscreen chamber wrapper */
+.frequency-chamber-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+
+  /* Deep space gradient base */
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.2), transparent 55%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 60%),
+    radial-gradient(circle at center, rgba(15, 23, 42, 0.95), #020617 70%);
+  color: #ecfdf5;
+}
+
+/* Darkening veil for extra clarity */
+.frequency-chamber-dark-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 0, rgba(0, 0, 0, 0.8) 55%, rgba(0, 0, 0, 0.95) 100%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Exit button (top-right) */
+.chamber-exit-btn {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 30;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(52, 211, 153, 0.7);
+  background: radial-gradient(circle at 30% 30%, rgba(16, 185, 129, 0.15), rgba(15, 23, 42, 0.9));
+  color: #a7f3d0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 0 18px rgba(16, 185, 129, 0.7),
+    0 0 2px rgba(15, 23, 42, 1);
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.18s ease-out,
+    background 0.18s ease-out;
+}
+
+.chamber-exit-btn:hover {
+  transform: scale(1.06) translateY(-1px);
+  box-shadow:
+    0 0 26px rgba(52, 211, 153, 0.95),
+    0 0 4px rgba(15, 23, 42, 1);
+  background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.3), rgba(15, 23, 42, 0.95));
+}
+
+/* ============================
+   Parallax Stars + Nebula + Scan Lines
+   ============================ */
+
+.cosmic-particles {
+  position: absolute;
+  inset: -10%;
+  z-index: 0;
+  pointer-events: none;
+
+  /* Layered background:
+     1) far stars
+     2) near stars
+     3) nebula
+     4) scan lines overlay
+  */
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(148, 163, 184, 0.7) 0, transparent 45%),
+    radial-gradient(circle at 80% 15%, rgba(94, 234, 212, 0.7) 0, transparent 50%),
+    radial-gradient(circle at 20% 75%, rgba(56, 189, 248, 0.7) 0, transparent 55%),
+    radial-gradient(circle at 60% 60%, rgba(52, 211, 153, 0.6) 0, transparent 55%),
+    /* star fields */
+    radial-gradient(circle, rgba(248, 250, 252, 0.8) 0, transparent 55%),
+    radial-gradient(circle, rgba(148, 163, 184, 0.7) 0, transparent 60%),
+    /* scan lines – subtle */
+    repeating-linear-gradient(
+      to bottom,
+      rgba(15, 23, 42, 0.2) 0px,
+      rgba(15, 23, 42, 0.2) 1px,
+      rgba(15, 23, 42, 0) 3px,
+      rgba(15, 23, 42, 0) 4px
+    );
+
+  background-size:
+    700px 700px,
+    650px 650px,
+    680px 680px,
+    720px 720px,
+    2px 2px,
+    3px 3px,
+    auto;
+
+  background-position:
+    0% 0%,
+    100% 10%,
+    5% 100%,
+    95% 80%,
+    0 0,
+    0 0,
+    0 0;
+
+  mix-blend-mode: screen;
+
+  animation:
+    galactic-parallax 32s linear infinite,
+    nebula-ripple 28s ease-in-out infinite alternate;
+}
+
+/* Parallax drift for stars / nebula */
+@keyframes galactic-parallax {
+  0% {
+    background-position:
+      0% 0%,
+      100% 10%,
+      5% 100%,
+      95% 80%,
+      0 0,
+      0 0,
+      0 0;
+  }
+  50% {
+    background-position:
+      5% 8%,
+      95% 5%,
+      0% 95%,
+      100% 70%,
+      -10px 10px,
+      10px -10px,
+      0 1px;
+  }
+  100% {
+    background-position:
+      0% 0%,
+      100% 10%,
+      5% 100%,
+      95% 80%,
+      0 0,
+      0 0,
+      0 0;
+  }
+}
+
+/* Nebula breathing / rippling */
+@keyframes nebula-ripple {
+  0% {
+    filter: blur(10px) saturate(1.2);
+    opacity: 0.85;
+  }
+  50% {
+    filter: blur(14px) saturate(1.4);
+    opacity: 1;
+  }
+  100% {
+    filter: blur(12px) saturate(1.1);
+    opacity: 0.9;
+  }
+}
+
+/* Short fade-in helper used by chamber content */
+.animate-fadeIn {
+  animation: fadeInUpSoft 0.7s ease-out;
+}
+
+@keyframes fadeInUpSoft {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================
+   Optional star field class (if used elsewhere)
+   ============================ */
+
+.star-field {
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle, rgba(248, 250, 252, 0.85) 0, transparent 50%),
+    radial-gradient(circle, rgba(148, 163, 184, 0.75) 0, transparent 55%);
+  background-size: 2px 2px, 3px 3px;
+  background-position: 0 0, 0 0;
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  animation: star-glide 40s linear infinite;
+}
+
+@keyframes star-glide {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: -200px -200px, 200px 200px;
+  }
+}
+
+/* ============================
+   Hologram-style text (used in headings)
+   ============================ */
+
+.hologram-text {
+  position: relative;
+  text-shadow:
+    0 0 14px rgba(52, 211, 153, 0.9),
+    0 0 26px rgba(16, 185, 129, 0.9);
+}
+
+.hologram-text::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(52, 211, 153, 0.35) 40%,
+    rgba(52, 211, 153, 0.9) 50%,
+    rgba(52, 211, 153, 0.35) 60%,
+    transparent 100%
+  );
+  opacity: 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: holo-sweep 5s linear infinite;
+}
+
+@keyframes holo-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  20% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+}

@@ -1,10 +1,143 @@
-{
-  "Mango": "Immunity & Skin Glow",
-  "Spinach": "Iron Boost & Detox",
-  "Blueberries": "Brain Health",
-  "Turmeric": "Anti-inflammatory",
-  "Ginger": "Circulation & Digestion",
-  "Almonds": "Healthy Fats",
-  "Kale": "High in Antioxidants"
-}
+[
+  {
+    "id": 1,
+    "name": "Mango",
+    "category": "Fruits",
+    "benefits": ["Immunity", "Skin Glow", "Cellular Repair"],
+    "vibe": ["immune", "skin", "detox"]
+  },
+  {
+    "id": 2,
+    "name": "Spinach",
+    "category": "Vegetables",
+    "benefits": ["Iron Boost", "Detox", "Alkalinity"],
+    "vibe": ["detox", "alkaline", "blood"]
+  },
+  {
+    "id": 3,
+    "name": "Blueberries",
+    "category": "Fruits",
+    "benefits": ["Brain Health", "Antioxidants"],
+    "vibe": ["brain", "focus", "anti-aging"]
+  },
+  {
+    "id": 4,
+    "name": "Turmeric",
+    "category": "Spices",
+    "benefits": ["Anti-inflammatory", "Joint Support"],
+    "vibe": ["joints", "anti-inflammatory"]
+  },
+  {
+    "id": 5,
+    "name": "Ginger",
+    "category": "Spices",
+    "benefits": ["Circulation", "Digestion", "Nausea Relief"],
+    "vibe": ["joints", "gut", "circulation"]
+  },
+  {
+    "id": 6,
+    "name": "Almonds",
+    "category": "Seeds",
+    "benefits": ["Healthy Fats", "Energy"],
+    "vibe": ["energy", "brain"]
+  },
+  {
+    "id": 7,
+    "name": "Kale",
+    "category": "Vegetables",
+    "benefits": ["Antioxidants", "Chlorophyll"],
+    "vibe": ["detox", "immune"]
+  },
+  {
+    "id": 8,
+    "name": "Pineapple",
+    "category": "Fruits",
+    "benefits": ["Anti-inflammatory", "Hydration"],
+    "vibe": ["joints", "detox"]
+  },
+  {
+    "id": 9,
+    "name": "Beets",
+    "category": "Vegetables",
+    "benefits": ["Blood Flow", "Endurance"],
+    "vibe": ["circulation", "endurance"]
+  },
+  {
+    "id": 10,
+    "name": "Coconut Water",
+    "category": "Seeds",
+    "benefits": ["Electrolytes", "Hydration"],
+    "vibe": ["hydration"]
+  },
+  {
+    "id": 11,
+    "name": "Avocado",
+    "category": "Fruits",
+    "benefits": ["Healthy Fats", "Brain Support"],
+    "vibe": ["brain", "hormones"]
+  },
+  {
+    "id": 12,
+    "name": "Strawberries",
+    "category": "Fruits",
+    "benefits": ["Collagen", "Skin Repair", "Vitamin C"],
+    "vibe": ["skin", "collagen"]
+  },
+  {
+    "id": 13,
+    "name": "Carrots",
+    "category": "Vegetables",
+    "benefits": ["Eye Health", "Beta-Carotene"],
+    "vibe": ["vision", "anti-aging"]
+  },
+  {
+    "id": 14,
+    "name": "Celery",
+    "category": "Vegetables",
+    "benefits": ["Detox", "Hydration"],
+    "vibe": ["detox", "hydration"]
+  },
+  {
+    "id": 15,
+    "name": "Chia Seeds",
+    "category": "Seeds",
+    "benefits": ["Omega-3", "Fiber", "Satiety"],
+    "vibe": ["gut", "energy"]
+  },
+  {
+    "id": 16,
+    "name": "Hemp Hearts",
+    "category": "Seeds",
+    "benefits": ["Protein", "Hormone Support"],
+    "vibe": ["hormones", "muscle"]
+  },
+  {
+    "id": 17,
+    "name": "Cinnamon",
+    "category": "Spices",
+    "benefits": ["Blood Sugar Regulation"],
+    "vibe": ["blood-sugar"]
+  },
+  {
+    "id": 18,
+    "name": "Blackberries",
+    "category": "Fruits",
+    "benefits": ["Anti-aging", "Antioxidants"],
+    "vibe": ["anti-aging", "skin"]
+  },
+  {
+    "id": 19,
+    "name": "Lemon",
+    "category": "Fruits",
+    "benefits": ["Detox", "Liver Support"],
+    "vibe": ["detox", "liver"]
+  },
+  {
+    "id": 20,
+    "name": "Mint",
+    "category": "Spices",
+    "benefits": ["Digestion", "Cooling"],
+    "vibe": ["gut", "cooling"]
+  }
+]
 

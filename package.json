@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@fontsource/cinzel-decorative": "^5.2.8",
+    "@fontsource/poppins": "^5.2.7",
     "firebase": "^11.9.1",
+    "lucide-react": "^0.554.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "^5.0.1"
+    "react-router-dom": "^7.9.6",
+    "react-tsparticles": "^2.12.2",
+    "tsparticles": "^3.9.1"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -25,8 +30,10 @@
     ]
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.11"
+    "react-scripts": "^5.0.1",
+    "tailwindcss": "^3.4.18"
   }
 }

@@ -1,0 +1,147 @@
+/* src/styles/frequencyLab.css */
+
+/* Shell wrapper (reuses cosmic-nebula-page from index.css) */
+.frequency-lab-shell {
+  position: relative;
+}
+
+/* Generic glassy card for this page */
+.galactic-card {
+  position: relative;
+  border-radius: 24px;
+  padding: 1.5rem;
+  background: radial-gradient(
+      circle at 0% 0%,
+      rgba(34, 197, 94, 0.18),
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      rgba(56, 189, 248, 0.18),
+      transparent 60%
+    ),
+    rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  box-shadow:
+    0 0 28px rgba(16, 185, 129, 0.5),
+    0 0 60px rgba(15, 23, 42, 0.9);
+  overflow: hidden;
+}
+
+/* Triple-stack layout */
+.triple-stack-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .triple-stack-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.triple-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(167, 243, 208, 0.8);
+  margin-bottom: 0.35rem;
+}
+
+.triple-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #a7f3d0;
+  text-shadow:
+    0 0 12px rgba(34, 197, 94, 0.8),
+    0 0 24px rgba(56, 189, 248, 0.6);
+}
+
+.triple-caption {
+  font-size: 0.75rem;
+  color: rgba(209, 250, 229, 0.7);
+  margin-top: 0.4rem;
+}
+
+/* Size pills */
+.size-pill {
+  border-radius: 999px;
+  padding: 0.4rem 1.1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid rgba(45, 212, 191, 0.6);
+  background: rgba(15, 23, 42, 0.95);
+  color: rgba(236, 253, 245, 0.9);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.size-pill:hover {
+  background: rgba(16, 185, 129, 0.35);
+  box-shadow:
+    0 0 16px rgba(16, 185, 129, 0.6),
+    0 0 28px rgba(8, 47, 73, 0.8);
+}
+
+.size-pill-active {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 1),
+    rgba(59, 130, 246, 1)
+  );
+  color: #020617;
+  border-color: rgba(248, 250, 252, 0.9);
+  box-shadow:
+    0 0 22px rgba(16, 185, 129, 0.9),
+    0 0 40px rgba(59, 130, 246, 0.9);
+  transform: translateY(-1px);
+}
+
+/* Match input-field style used on Frequencies page */
+.input-field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  font-size: 0.78rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: rgba(129, 140, 248, 0.95);
+  box-shadow:
+    0 0 16px rgba(56, 189, 248, 0.9),
+    0 0 30px rgba(129, 140, 248, 0.9);
+}
+
+/* External platform pills (reuse from frequencies.css look) */
+.platform-pill {
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  background: rgba(15, 23, 42, 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.platform-pill:hover {
+  filter: brightness(1.08);
+}
+
+.youtube-pill {
+  border-color: rgba(248, 113, 113, 0.9);
+}
+
+.spotify-pill {
+  border-color: rgba(52, 211, 153, 0.9);
+}
+
+.apple-pill {
+  border-color: rgba(148, 163, 184, 0.9);
+}

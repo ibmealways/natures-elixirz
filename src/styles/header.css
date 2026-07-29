@@ -1,0 +1,56 @@
+.ne-global-header {
+  width: 100%;
+  padding: 1.4rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: fixed;
+  top: 0;
+  z-index: 9999;
+}
+
+.ne-header-left h1.ne-brand {
+  font-size: 1.5rem;
+  color: #a7f3d0;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.ne-sub {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.8rem;
+}
+
+.ne-header-nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.ne-nav-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.5);
+  color: #fff;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: 0.25s ease;
+}
+
+.ne-nav-btn:hover {
+  background: rgba(22, 163, 74, 0.4);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ne-nav-btn.active {
+  background: #059669;
+  color: #fff;
+}
+
+.ne-nav-btn.premium {
+  background: rgba(255, 215, 0, 0.25);
+  border-color: #ffd70099;
+}
