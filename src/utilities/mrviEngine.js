@@ -51,9 +51,11 @@ export function evaluateComponentStatus(key, currentRatio, baselineRatio) {
   if (!t) return { status: "STABLE", delta: 0 };
 
   const d = deltaRatio(currentRatio, baselineRatio);
+  const reachedImprove = t.improve >= 0 ? d >= t.improve : d <= t.improve;
+  const reachedDecline = t.decline >= 0 ? d >= t.decline : d <= t.decline;
 
-  if (d >= t.improve) return { status: "IMPROVING", delta: d };
-  if (d <= t.decline) return { status: "DECLINING", delta: d };
+  if (reachedImprove) return { status: "IMPROVING", delta: d };
+  if (reachedDecline) return { status: "DECLINING", delta: d };
 
   return { status: "STABLE", delta: d };
 }

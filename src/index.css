@@ -492,7 +492,7 @@ button {
 
 .cosmic-page-shell {
   min-height: 100vh;
-  padding-top: 40px;
+  padding-top: 12px;
   padding-bottom: 80px;
 
   background: radial-gradient(circle at top, #063024 0%, #021a22 40%, #000 100%);
@@ -527,3 +527,10 @@ button {
   background: linear-gradient(to bottom, transparent, #000);
   pointer-events: none;
 }
+/* Keep the external translator's injected banner from shifting the cosmic shell. */
+body { top: 0 !important; }
+.goog-te-banner-frame, .skiptranslate iframe { display: none !important; }
+#google_translate_element { position: fixed; width: 1px; height: 1px; overflow: hidden; opacity: .01; pointer-events: none; }
+/* Public launch-policy links remain available on every route, including before sign-in. */
+.public-legal-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:1.15rem clamp(1rem,4vw,3rem);border-top:1px solid rgba(94,234,212,.18);background:#02070d;color:#91a6aa;font-size:.78rem}
+.public-legal-footer nav{display:flex;flex-wrap:wrap;gap:.55rem 1rem}.public-legal-footer a{color:#a7f3d0;text-decoration:none}.public-legal-footer a:hover,.public-legal-footer a:focus-visible{text-decoration:underline;color:#fff}

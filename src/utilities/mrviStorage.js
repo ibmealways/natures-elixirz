@@ -4,7 +4,12 @@
 // Stores ONLY numeric metrics + derived outputs. No raw video.
 // ===========================================================
 
-const KEY = "naturesElixirz.mrvi.profile.v1";
+const KEY_PREFIX = "naturesElixirz.mrvi.profile.v2";
+
+function storageKey(scope) {
+  const safeScope = String(scope || "guest").replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${KEY_PREFIX}.${safeScope}`;
+}
 
 function safeParse(json, fallback) {
   try {
@@ -15,8 +20,8 @@ function safeParse(json, fallback) {
   }
 }
 
-export function getMRVIProfile() {
-  const raw = localStorage.getItem(KEY);
+export function getMRVIProfile(scope) {
+  const raw = localStorage.getItem(storageKey(scope));
   const base = {
     consent: false,
     createdAt: null,
@@ -32,27 +37,43 @@ export function getMRVIProfile() {
   return { ...base, ...safeParse(raw, base) };
 }
 
-export function saveMRVIProfile(profile) {
-  localStorage.setItem(KEY, JSON.stringify(profile));
+export function saveMRVIProfile(profile, scope) {
+  localStorage.setItem(storageKey(scope), JSON.stringify(profile));
+  notifyCloudChange(scope);
   return profile;
 }
 
-export function setMRVIConsent(consent) {
-  const p = getMRVIProfile();
+export function restoreMRVIProfile(value, scope) {
+  const base = getMRVIProfile(scope);
+  const safe = value && typeof value === "object" ? value : {};
+  const scans = Array.isArray(safe.scans) ? safe.scans.slice(-120) : [];
+  const restored = {
+    ...base,
+    ...safe,
+    scans,
+    settings: { ...base.settings, ...(safe.settings || {}) },
+  };
+  localStorage.setItem(storageKey(scope), JSON.stringify(restored));
+  window.dispatchEvent(new CustomEvent("naturesElixirz:movement-restored"));
+  return restored;
+}
+
+export function setMRVIConsent(consent, scope) {
+  const p = getMRVIProfile(scope);
   p.consent = Boolean(consent);
   if (!p.createdAt) p.createdAt = new Date().toISOString();
-  return saveMRVIProfile(p);
+  return saveMRVIProfile(p, scope);
 }
 
-export function setMRVIBaseline(baselineMetrics) {
-  const p = getMRVIProfile();
+export function setMRVIBaseline(baselineMetrics, scope) {
+  const p = getMRVIProfile(scope);
   p.baseline = { ...baselineMetrics };
   p.baselineSetAt = new Date().toISOString();
-  return saveMRVIProfile(p);
+  return saveMRVIProfile(p, scope);
 }
 
-export function addMRVIScan({ timestamp, metrics, output }) {
-  const p = getMRVIProfile();
+export function addMRVIScan({ timestamp, metrics, output }, scope) {
+  const p = getMRVIProfile(scope);
   const scan = { timestamp, metrics, output };
   p.scans = Array.isArray(p.scans) ? p.scans : [];
   p.scans.push(scan);
@@ -63,10 +84,12 @@ export function addMRVIScan({ timestamp, metrics, output }) {
     p.scans = p.scans.slice(-retain);
   }
 
-  return saveMRVIProfile(p);
+  return saveMRVIProfile(p, scope);
 }
 
-export function resetMRVIProfile() {
-  localStorage.removeItem(KEY);
-  return getMRVIProfile();
+export function resetMRVIProfile(scope) {
+  localStorage.removeItem(storageKey(scope));
+  notifyCloudChange(scope);
+  return getMRVIProfile(scope);
 }
+import { notifyCloudChange } from "./cloudChange";

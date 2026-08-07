@@ -1,30 +1,77 @@
-import { useState } from 'react';
-import { auth } from '../firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { useState } from "react";
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { auth, isFirebaseConfigured } from "../firebase";
+import { useAuth } from "../context/AuthContext";
+import { requestVipFamilyAccess } from "../utilities/vipFamily";
+import { requestBrandedVerificationEmail } from "../utilities/emailVerification";
 
 export default function AuthForm() {
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [familyAccount, setFamilyAccount] = useState(false);
+  const [subscriberEmail, setSubscriberEmail] = useState("");
 
-  const handleSignUp = async () => {
-    await createUserWithEmailAndPassword(auth, email, password);
-    alert("Signed up!");
+  const submit = async (mode) => {
+    if (!auth) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      if (mode === "signup") {
+        await createUserWithEmailAndPassword(auth, email, password);
+        await requestBrandedVerificationEmail();
+        if (familyAccount) {
+          await requestVipFamilyAccess(subscriberEmail);
+          setMessage("Account created and secure family request sent. Verify your email; access begins only after the V.I.P. subscriber approves you.");
+        } else {
+          setMessage("Account created. Check your inbox and verify your email before subscribing.");
+        }
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+        setMessage("Signed in.");
+      }
+    } catch {
+      setMessage("Authentication was unsuccessful. Check your details and try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleSignIn = async () => {
-    await signInWithEmailAndPassword(auth, email, password);
-    alert("Signed in!");
+  const resetPassword = async () => {
+    if (!auth || !email.trim()) {
+      setMessage("Enter your email address first, then choose Reset password.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setMessage("If an account exists for that address, a password-reset email has been sent.");
+    } catch {
+      setMessage("Password reset could not be started. Check the address and try again.");
+    } finally {
+      setBusy(false);
+    }
   };
+
+  if (!isFirebaseConfigured) {
+    return <p className="ne-muted">Cloud accounts are not configured yet. Your profile remains stored only on this device.</p>;
+  }
+  if (user) return null;
 
   return (
-    <div className="p-4 text-center">
-      <h2 className="text-xl mb-2">🔑 Auth</h2>
-      <input className="border p-2 m-1" placeholder="email" value={email} onChange={e => setEmail(e.target.value)} />
-      <input className="border p-2 m-1" type="password" placeholder="password" value={password} onChange={e => setPassword(e.target.value)} />
-      <div>
-        <button className="bg-green-500 p-2 m-1 rounded" onClick={handleSignUp}>Sign Up</button>
-        <button className="bg-blue-500 p-2 m-1 rounded" onClick={handleSignIn}>Sign In</button>
+    <div className="space-y-3">
+      <input className="w-full rounded-xl border border-white/10 bg-black/30 p-3" type="email" autoComplete="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      <input className="w-full rounded-xl border border-white/10 bg-black/30 p-3" type="password" autoComplete="current-password" minLength="8" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
+      <label className="auth-family-choice"><input type="checkbox" checked={familyAccount} onChange={(event) => setFamilyAccount(event.target.checked)} /><span>Create a V.I.P. family account</span></label>
+      {familyAccount && <label className="auth-subscriber-email"><span>V.I.P. subscriber email</span><input required type="email" autoComplete="off" placeholder="subscriber@example.com" value={subscriberEmail} onChange={(event) => setSubscriberEmail(event.target.value)} /><small>The subscriber receives an alert and must approve this request. Knowing an email address alone never unlocks access.</small></label>}
+      <div className="flex gap-2">
+        <button disabled={busy || (familyAccount && !subscriberEmail)} className="ne-primary" onClick={() => submit("signup")}>Create account</button>
+        <button disabled={busy} className="ne-secondary" onClick={() => submit("signin")}>Sign in</button>
       </div>
+      <button disabled={busy} className="ne-text-action" type="button" onClick={resetPassword}>Forgot password? Send reset email</button>
+      {message && <p aria-live="polite">{message}</p>}
     </div>
   );
 }

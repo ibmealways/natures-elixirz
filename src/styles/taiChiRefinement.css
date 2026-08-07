@@ -1,0 +1,49 @@
+.taichi-cosmos .glow-nav-container {
+  margin-bottom: 10px;
+}
+
+.taichi-page {
+  padding-top: 0;
+}
+
+.flow-hero {
+  margin-bottom: 1rem;
+}
+
+.flow-pathways {
+  margin: 1rem 0;
+}
+
+.taichi-selector {
+  margin-top: 1.1rem;
+}
+
+.taichi-selector button {
+  min-height: 154px;
+  justify-content: center;
+}
+
+.taichi-selector button > i {
+  margin-bottom: .65rem;
+}
+
+.movement-foundations {
+  margin: .85rem 0;
+}
+
+.taichi-progress{margin:1rem 0;padding:clamp(1.1rem,3vw,1.8rem);border:1px solid rgba(104,232,207,.2);border-radius:24px;background:radial-gradient(circle at 92% 5%,rgba(127,83,215,.18),transparent 20rem),rgba(2,10,18,.88)}
+.taichi-progress-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.taichi-progress-heading .ne-kicker{display:flex;align-items:center;gap:.4rem}.taichi-progress-heading h2{margin:.25rem 0;color:#effffc;font-size:clamp(1.5rem,3vw,2.35rem)}.taichi-progress-heading p:not(.ne-kicker){max-width:700px;color:#89a49e;font-size:.72rem;line-height:1.5}.taichi-streak{display:flex;align-items:center;gap:.35rem;padding:.55rem .75rem;border:1px solid rgba(247,191,75,.3);border-radius:999px;color:#f6d887;background:rgba(103,60,8,.22);font-size:.68rem;white-space:nowrap}.taichi-streak strong{font-size:1rem}.taichi-session-message{margin:.8rem 0 0;padding:.55rem .7rem;border:1px solid rgba(105,232,204,.3);border-radius:10px;color:#a8f5df;background:rgba(25,128,107,.16);font-size:.7rem}
+.taichi-progress-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:.65rem;margin:1rem 0}.taichi-progress-metrics article{padding:.85rem;border:1px solid rgba(105,232,204,.12);border-radius:15px;background:rgba(4,26,31,.62)}.taichi-progress-metrics strong{display:block;color:#8cf2d8;font-size:1.65rem}.taichi-progress-metrics span{color:#809c95;font-size:.62rem;text-transform:uppercase;letter-spacing:.07em}
+.taichi-pathway-progress{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem}.taichi-pathway-progress article{display:grid;grid-template-columns:28px 1fr;align-items:center;gap:.55rem;padding:.75rem;border:1px solid rgba(130,111,222,.14);border-radius:14px;background:rgba(8,9,27,.5)}.taichi-pathway-progress article>svg{color:#71e4ca}.taichi-pathway-progress article>div{display:flex;flex-direction:column}.taichi-pathway-progress strong{color:#e9fff9;font-size:.75rem}.taichi-pathway-progress span{color:#7f9b94;font-size:.6rem}.taichi-pathway-progress article>i{grid-column:1/-1;height:3px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.06)}.taichi-pathway-progress article>i span{display:block;height:100%;background:linear-gradient(90deg,#62e4c4,#9a7de7)}.taichi-recent{margin-top:.8rem;color:#8fe9d2;font-size:.7rem}.taichi-recent summary{cursor:pointer}.taichi-recent ul{display:grid;gap:.35rem;margin-top:.6rem}.taichi-recent li{display:grid;grid-template-columns:1fr auto auto;gap:.8rem;padding:.48rem .6rem;border-bottom:1px solid rgba(255,255,255,.06);color:#a8beb8}.taichi-recent li strong{color:#e9d68e}.taichi-recent time{color:#748b85}
+
+@media (max-width: 800px) {
+  .taichi-cosmos .glow-nav-container {
+    margin-bottom: 8px;
+  }
+
+  .taichi-page {
+    padding-top: 0;
+  }
+
+  .taichi-progress-heading{flex-direction:column}.taichi-progress-metrics{grid-template-columns:repeat(2,1fr)}.taichi-pathway-progress{grid-template-columns:1fr}.taichi-recent li{grid-template-columns:1fr auto}.taichi-recent time{grid-column:1/-1}
+}

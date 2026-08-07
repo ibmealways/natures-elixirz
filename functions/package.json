@@ -1,0 +1,20 @@
+{
+  "name": "natures-elixirz-functions",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0",
+    "openai": "^5.23.2",
+    "stripe": "^19.0.0"
+  }
+}
