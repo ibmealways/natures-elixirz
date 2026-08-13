@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AudioLines, Camera, Check, ChevronLeft, ChevronRight, Compass, Crown, FileText, GlassWater, Image, LockKeyhole, Paperclip, Pause, PersonStanding, Play, Plus, Send, ShieldCheck, Sparkles, Trash2, UtensilsCrossed, X } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import TierPreviewBanner, { useDeveloperAccess, useTierAccess } from "../components/TierPreviewBanner";
@@ -12,6 +12,7 @@ import { addAstraGallerySlide, getAstraGallerySlides, removeAstraGallerySlide } 
 import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessExchange";
 import { buildAstraKernelContext } from "../utilities/astraKernelContext";
 import { getAstraConversation, saveAstraConversation } from "../utilities/astraConversationStorage";
+import { saveAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import { useLanguage } from "../context/LanguageContext";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
@@ -63,6 +64,7 @@ const capabilitySlides = [
 ];
 
 export default function AstraGuide() {
+  const navigate = useNavigate();
   const unlocked = useTierAccess(1);
   const developerAccess = useDeveloperAccess();
   const { user, configured } = useAuth();
@@ -163,7 +165,7 @@ export default function AstraGuide() {
     }
     setBusy(true);
     try {
-      const reply = await askAstraGuide({
+      const result = await askAstraGuide({
         message: displayMessage,
         attachments: sentAttachments.map(({ name, type, size, kind, dataUrl, text: attachmentText }) => ({ name, type, size, kind, dataUrl, text: attachmentText })),
         history: messages.slice(-10),
@@ -177,13 +179,18 @@ export default function AstraGuide() {
         languageName,
       });
       publishWellnessSignal(storageScope, "astra", { selection: "Personal guidance conversation" });
-      setMessages([...nextMessages, { role: "assistant", content: reply, createdAt: new Date().toISOString() }]);
+      setMessages([...nextMessages, { role: "assistant", content: result.reply, transfer: result.transfer, createdAt: new Date().toISOString() }]);
       setAttachments([]);
     } catch (requestError) {
       setError(requestError.message || "Astra Guide could not respond. Please try again.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function reviewTransfer(transfer) {
+    const savedTransfer = saveAstraKernelTransfer(transfer, storageScope);
+    navigate(savedTransfer.type === "smoothie" ? "/smoothie?source=astra" : "/meals?source=astra");
   }
 
   return <div className="cosmic-page-shell astra-cosmos"><GlowNav /><main className="ne-page astra-page">
@@ -218,7 +225,7 @@ export default function AstraGuide() {
       <article className="ne-panel astra-chat">
         <div className="astra-chat-heading"><div><span className="astra-orb" aria-hidden="true" /><div><strong>Astra Guide</strong><small>{status}</small></div></div><span className="astra-status">● Compass online</span></div>
         <div className="astra-messages" aria-live="polite">
-          {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`astra-message ${message.role}`}><span>{message.role === "assistant" ? "ASTRA" : "YOU"}</span><p>{message.content}</p>{message.attachments?.length > 0 && <div className="astra-message-attachments">{message.attachments.map((attachment) => attachment.kind === "image" ? <img key={attachment.id} src={attachment.dataUrl} alt={`Attached ${attachment.name}`} /> : <span key={attachment.id}><FileText size={15} /> {attachment.name}</span>)}</div>}</div>)}
+          {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`astra-message ${message.role}`}><span>{message.role === "assistant" ? "ASTRA" : "YOU"}</span><p>{message.content}</p>{message.transfer && <button type="button" className="ne-secondary astra-kernel-transfer" onClick={() => reviewTransfer(message.transfer)}>{message.transfer.type === "smoothie" ? <GlassWater size={16} /> : <UtensilsCrossed size={16} />} Review in {message.transfer.type === "smoothie" ? "Smoothie Kernel" : "Meal Plans"}</button>}{message.attachments?.length > 0 && <div className="astra-message-attachments">{message.attachments.map((attachment) => attachment.kind === "image" ? <img key={attachment.id} src={attachment.dataUrl} alt={`Attached ${attachment.name}`} /> : <span key={attachment.id}><FileText size={15} /> {attachment.name}</span>)}</div>}</div>)}
           {busy && <div className="astra-message assistant"><span>ASTRA</span><p>Mapping your clearest next step…</p></div>}
         </div>
         {error && <div className="ne-alert ne-alert-danger">{error}</div>}

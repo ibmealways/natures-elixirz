@@ -5,7 +5,7 @@ export async function askAstraGuide(payload) {
   if (!functions) throw new Error("Connect Firebase to activate live Astra Guide conversations.");
   const call = httpsCallable(functions, "askAstraGuide");
   const result = await call(payload);
-  return result.data.reply;
+  return { reply: result.data.reply, transfer: result.data.transfer || null };
 }
 
 export function previewAstraReply(prompt) {
@@ -21,4 +21,3 @@ export function previewAstraReply(prompt) {
   }
   return "Here is how I would begin: choose the finished size, list what you have, and tell me any allergies or ingredients to avoid. I can then propose exact whole-food quantities, preparation steps, and substitutions. I provide general wellness education—not diagnosis or treatment.";
 }
-

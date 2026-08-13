@@ -21,12 +21,14 @@ import { GoogleAuth } from "google-auth-library";
 import { backupReadiness, shouldReconcileLedger } from "./operations-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
+  astraReplySchema,
   buildKernelContext,
   buildJourneyContext,
   buildProfileContext,
   hasTierAccess,
   isActiveTierOne,
   validateConversation,
+  validateAstraReply,
 } from "./astra.js";
 
 initializeApp();
@@ -744,11 +746,11 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
       instructions: ASTRA_SYSTEM_INSTRUCTIONS,
       input,
       reasoning: { effort: "low" },
-      text: { verbosity: "medium" },
+      text: { verbosity: "medium", format: { type: "json_schema", name: "astra_reply", strict: true, schema: astraReplySchema } },
       safety_identifier: createHash("sha256").update(request.auth.uid).digest("hex"),
       max_output_tokens: 900,
     });
-    return { reply: response.output_text || "I could not form a response. Please try again." };
+    return validateAstraReply(JSON.parse(response.output_text));
   } catch (error) {
     console.error("Astra Guide request failed", { status: error.status, code: error.code });
     throw new HttpsError("unavailable", "Astra Guide is temporarily unavailable. Please try again.");

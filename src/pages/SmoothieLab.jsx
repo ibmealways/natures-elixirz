@@ -17,6 +17,7 @@ import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessEx
 import { getSmoothiePreference, saveSmoothiePreference } from "../utilities/smoothiePreferences";
 import { buildSmoothieVisualPreview } from "../utilities/smoothieVisualPreview";
 import { mergeAiSmoothieProposal } from "../utilities/aiSmoothie";
+import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/smoothieBuilder.css";
@@ -64,13 +65,14 @@ function ScopedSmoothieLab({ storageScope }) {
   const unlocked = useTierAccess(1);
   const workingProfile = isOnboarded ? profile : { healthGoals: [], conditions: [], allergies: "", avoidIngredients: "", dietaryPattern: "omnivore" };
   const requestedGoal = params.get("goal");
+  const astraTransfer = params.get("source") === "astra" ? getAstraKernelTransfer(storageScope, "smoothie") : null;
   const exchangeBrief = useMemo(() => buildKernelBrief(storageScope, "smoothie"), [storageScope]);
   const synchronizedGoal = exchangeBrief.signals.movement?.goal || exchangeBrief.signals.meals?.goal;
   const rememberedGoal = exchangeBrief.kernelMemory?.goals?.at(-1);
-  const initialGoal = goals.some(([value]) => value === requestedGoal) ? requestedGoal : rememberedGoal || profile.healthGoals?.[0] || synchronizedGoal || "general";
+  const initialGoal = goals.some(([value]) => value === astraTransfer?.goal) ? astraTransfer.goal : goals.some(([value]) => value === requestedGoal) ? requestedGoal : rememberedGoal || profile.healthGoals?.[0] || synchronizedGoal || "general";
   const [selectedGoals, setSelectedGoals] = useState([goals.some(([value]) => value === initialGoal) ? initialGoal : "general"]);
   const goal = selectedGoals[0];
-  const [size, setSize] = useState(16);
+  const [size, setSize] = useState(astraTransfer?.sizeOz || 16);
   const [inventory, setInventory] = useState(() => getKitchenInventory(storageScope));
   const [measurementSystem, setMeasurementSystem] = useState(getMeasurementSystem);
   useEffect(() => {
@@ -105,10 +107,23 @@ function ScopedSmoothieLab({ storageScope }) {
     setSelectedNames(baseRecipe.ingredients.map((ingredient) => ingredient.sourceName || ingredient.name).filter((name) => !preference.excludedNames.includes(name)));
     setIngredientReplacements(preference.ingredientReplacements);
     setPreferencesLoaded(true);
-    setGeneratedRecipe(null);
+    if (astraTransfer) {
+      setGeneratedRecipe(mergeAiSmoothieProposal({
+        name: astraTransfer.title,
+        description: `Transferred from Astra Chat for review with ${astraTransfer.ingredients.length} specifically selected ingredients.`,
+        type: "Astra Chat transfer",
+        ingredients: astraTransfer.ingredients,
+        benefits: [{ label: "Subscriber-selected transfer", level: "Supportive", detail: "Review quantities and profile compatibility before saving." }],
+        preparation: ["Add liquid first.", "Blend until smooth.", "Review texture and adjust with water if needed."],
+        practicalTips: astraTransfer.notes.length ? astraTransfer.notes : ["This transfer has not been silently saved; review it in the Smoothie Kernel first."],
+        medicationSafety: { reviewRequired: Boolean(profile.medications), status: profile.medications ? "Pharmacist review advised" : "No medication information provided", note: "Confirm individual compatibility when medicines or health conditions apply.", foodsAvoided: [] },
+      }, baseRecipe));
+      setGenerationStatus("transferred");
+      setGenerationMessage("Astra transferred this exact smoothie concept for your review. Nothing is saved until you choose Save generated recipe.");
+    } else setGeneratedRecipe(null);
     setVisualStatus("idle");
     setSaved(false);
-  }, [storageScope, selectedGoals, size, profile.allergies, profile.avoidIngredients, profile.dietaryPattern]);
+  }, [storageScope, selectedGoals, size, profile.allergies, profile.avoidIngredients, profile.dietaryPattern, astraTransfer?.id]);
 
   useEffect(() => {
     saveKitchenInventory(inventory, storageScope);

@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildJourneyContext, buildKernelContext, buildProfileContext, hasTierAccess, isActiveTierOne, validateConversation } from "./astra.js";
+import { buildJourneyContext, buildKernelContext, buildProfileContext, hasTierAccess, isActiveTierOne, validateAstraReply, validateConversation } from "./astra.js";
+
+test("Astra reply validation preserves an explicit Kernel transfer", () => {
+  const result = validateAstraReply({ reply: "Ready for review.", transfer: { type: "smoothie", ingredients: [{ name: "Pear" }, { name: "Spinach" }, { name: "Hemp seeds" }, { name: "Soy milk" }, { name: "Ginger" }] } });
+  assert.equal(result.transfer.type, "smoothie");
+  assert.equal(result.transfer.ingredients[1].name, "Spinach");
+});
+
+test("Astra reply validation treats no transfer as ordinary chat", () => {
+  assert.deepEqual(validateAstraReply({ reply: "General guidance.", transfer: { type: "none" } }), { reply: "General guidance.", transfer: null });
+});
 
 test("conversation validation trims and limits history", () => {
   const result = validateConversation({

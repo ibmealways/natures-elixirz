@@ -77,6 +77,11 @@ export function buildMealPlanContext(profile = {}, request = {}) {
     days: requestedDays,
     planningMonth: Math.min(12, Math.max(1, Math.floor(Number(request.planningMonth) || 1))),
     variation: Math.max(0, Number(request.variationSeed) || 0),
+    astraRequest: request.astraRequest && typeof request.astraRequest === "object" ? {
+      title: String(request.astraRequest.title || "").slice(0, 100),
+      ingredients: (request.astraRequest.ingredients || []).slice(0, 24).map((item) => String(item?.name || "").slice(0, 80)).filter(Boolean),
+      notes: cleanList(request.astraRequest.notes, 8),
+    } : null,
     kitchenItems: cleanList(request.kitchenItems),
     smoothieContext: rawSmoothie ? {
       recipeName: String(rawSmoothie.recipeName || "").slice(0, 120),

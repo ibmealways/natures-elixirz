@@ -14,6 +14,7 @@ import { buildGenerationContext } from "../utilities/generationContext";
 import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessExchange";
 import { getSuggestedGoal, getWellnessJourney, recordMealJourney, VALID_GOALS } from "../utilities/wellnessJourney";
 import { formatQuantityText, getMeasurementSystem, saveMeasurementSystem } from "../utilities/measurements";
+import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/mealPlanStudio.css";
@@ -74,6 +75,7 @@ export default function MealPlanLab() {
   const { user } = useAuth();
   const { profile, isOnboarded } = useSubscriber();
   const storageScope = user?.uid || "guest";
+  const astraTransfer = handoffSource === "astra" ? getAstraKernelTransfer(storageScope, "meal_plan") : null;
   const smoothieInventory = useMemo(() => getKitchenInventory(storageScope), [storageScope]);
   const [mealInventory, setMealInventory] = useState(() => getMealKitchenInventory(storageScope));
   const [measurementSystem, setMeasurementSystem] = useState(getMeasurementSystem);
@@ -92,8 +94,8 @@ export default function MealPlanLab() {
   const unlocked = useTierAccess(3);
   const requestedGoal = params.get("goal");
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
-  const [goal, setGoal] = useState(VALID_GOALS.includes(requestedGoal) ? requestedGoal : rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
-  const [days, setDays] = useState(1);
+  const [goal, setGoal] = useState(VALID_GOALS.includes(astraTransfer?.goal) ? astraTransfer.goal : VALID_GOALS.includes(requestedGoal) ? requestedGoal : rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
+  const [days, setDays] = useState(astraTransfer?.days || 1);
   const [planningMonth, setPlanningMonth] = useState(1);
   const yearlyPlanning = profile.subscriptionBillingMode === "yearly";
   const [generated, setGenerated] = useState(null);
@@ -221,6 +223,7 @@ export default function MealPlanLab() {
         variationSeed,
         planningMonth,
         kitchenItems: generationContext.kitchenItems,
+        astraRequest: astraTransfer ? { title: astraTransfer.title, ingredients: astraTransfer.ingredients, notes: astraTransfer.notes } : null,
       });
       if (requestEpoch !== planEpochRef.current) return;
       nextPlan = result.data.plan;
@@ -250,6 +253,12 @@ export default function MealPlanLab() {
     autoHandoffStartedRef.current = true;
     generate(0, goal, days);
   }, [handoffSource, smoothieContext?.recipeName, unlocked, isOnboarded]);
+
+  useEffect(() => {
+    if (handoffSource !== "astra" || !astraTransfer || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;
+    autoHandoffStartedRef.current = true;
+    generate(0, goal, days);
+  }, [handoffSource, astraTransfer?.id, unlocked, isOnboarded]);
 
   function generateAlternate() {
     const nextIndex = alternateIndex + 1;

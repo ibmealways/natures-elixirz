@@ -27,10 +27,56 @@ Safety rules:
 - Treat uploaded photos and files as user-provided context, not proof of a diagnosis. Describe only
   what is visibly supported, acknowledge uncertainty, never identify a person, and never diagnose
   an injury or illness from an image. Escalate urgent or concerning symptoms to in-person care.
-- Treat subscriber-approved Kernel context as read-only reference data. Use it when relevant,
-  distinguish the Smoothie pantry from the Meal Plan pantry/fridge/freezer, and never claim you
-  saved, removed, purchased, or changed data unless the application explicitly reports that action.
+- Treat subscriber-approved Kernel context as reference data. Use it when relevant and distinguish
+  the Smoothie pantry from the Meal Plan pantry/fridge/freezer.
+- When the subscriber explicitly asks to move, transfer, send, use, or open a specific smoothie or
+  meal-plan concept in a Kernel, return a transfer proposal for review. Preserve the specifically
+  selected version (for example, "the second smoothie") and its exact ingredient quantities.
+- Never claim the transfer is already saved or generated. Say it is ready for subscriber review in
+  the destination Kernel. Use transfer type "none" when no explicit transfer was requested.
 `.trim();
+
+const transferIngredientSchema = {
+  type: "object", additionalProperties: false,
+  required: ["name", "amount", "unit", "group", "reason"],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 80 },
+    amount: { type: "number", exclusiveMinimum: 0, maximum: 8 },
+    unit: { type: "string", enum: ["cup", "tbsp", "tsp", "scoop", "piece"] },
+    group: { type: "string", enum: ["Fruit", "Vegetable", "Protein", "Seed", "Liquid", "Spice", "Grain", "Nut butter", "Sweetener"] },
+    reason: { type: "string", minLength: 3, maxLength: 180 },
+  },
+};
+
+export const astraReplySchema = {
+  type: "object", additionalProperties: false, required: ["reply", "transfer"],
+  properties: {
+    reply: { type: "string", minLength: 1, maxLength: 4000 },
+    transfer: {
+      type: "object", additionalProperties: false,
+      required: ["type", "title", "goal", "sizeOz", "days", "ingredients", "notes"],
+      properties: {
+        type: { type: "string", enum: ["none", "smoothie", "meal_plan"] },
+        title: { type: "string", maxLength: 100 },
+        goal: { type: "string", maxLength: 40 },
+        sizeOz: { type: "number", minimum: 0, maximum: 64 },
+        days: { type: "integer", minimum: 0, maximum: 7 },
+        ingredients: { type: "array", maxItems: 24, items: transferIngredientSchema },
+        notes: { type: "array", maxItems: 8, items: { type: "string", maxLength: 220 } },
+      },
+    },
+  },
+};
+
+export function validateAstraReply(value = {}) {
+  const reply = String(value.reply || "").trim();
+  if (!reply) throw new Error("Astra reply was empty.");
+  const transfer = value.transfer || {};
+  if (transfer.type === "none") return { reply, transfer: null };
+  if (!["smoothie", "meal_plan"].includes(transfer.type)) throw new Error("Astra transfer type was invalid.");
+  if (transfer.type === "smoothie" && (!Array.isArray(transfer.ingredients) || transfer.ingredients.length < 5)) throw new Error("Astra smoothie transfer was incomplete.");
+  return { reply, transfer };
+}
 
 function validateAttachments(value) {
   if (!Array.isArray(value)) return [];
