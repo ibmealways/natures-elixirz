@@ -13,6 +13,7 @@ import { billingModeFromPrice, hasActiveBetaTestingAccess, priceKey, tierFromPri
 import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
 import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
+import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   buildKernelContext,
@@ -435,16 +436,50 @@ function requireRecentAccountAuth(request) {
 
 const snapshotData = (snapshot) => snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
 
+async function getSubscriberLifecycleRecords(uid) {
+  const [
+    betaAccess, betaAdmin, betaSignupRequest, foundingReservation,
+    ownedHousehold, memberHouseholds, ownedHouseholdRequests, memberHouseholdRequests,
+    subscriptionLedger, supportRequests, mailByUid, mailByAccountUid,
+    adminAudit, testerAudit,
+  ] = await Promise.all([
+    db.doc(`betaTesters/${uid}`).get(),
+    db.doc(`betaAdmins/${uid}`).get(),
+    db.doc(`betaSignupRequests/${uid}`).get(),
+    db.doc(`vipFoundingReservations/${uid}`).get(),
+    db.doc(`vipHouseholds/${uid}`).get(),
+    db.collection("vipHouseholds").where("memberUids", "array-contains", uid).get(),
+    db.collection("vipHouseholdRequests").where("ownerUid", "==", uid).get(),
+    db.collection("vipHouseholdRequests").where("memberUid", "==", uid).get(),
+    db.collection("subscriptionLedger").where("uid", "==", uid).get(),
+    db.collection("supportRequests").where("uid", "==", uid).get(),
+    db.collection("mail").where("uid", "==", uid).get(),
+    db.collection("mail").where("accountUid", "==", uid).get(),
+    db.collection("betaAdminAudit").where("adminUid", "==", uid).get(),
+    db.collection("betaAdminAudit").where("testerUid", "==", uid).get(),
+  ]);
+  return {
+    betaAccess, betaAdmin, betaSignupRequest, foundingReservation, ownedHousehold,
+    memberHouseholds: memberHouseholds.docs,
+    householdRequests: uniqueDocuments(ownedHouseholdRequests, memberHouseholdRequests),
+    subscriptionLedger: subscriptionLedger.docs,
+    supportRequests: supportRequests.docs,
+    mailRecords: uniqueDocuments(mailByUid, mailByAccountUid),
+    betaAdminAudit: uniqueDocuments(adminAudit, testerAudit),
+  };
+}
+
 export const exportSubscriberData = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to export your data.");
   const uid = request.auth.uid;
   const userRef = db.doc(`users/${uid}`);
-  const [account, recipes, privateRecords, mealVisualSets, smoothieVisualSets, betaAccess] = await Promise.all([
+  const [account, recipes, privateRecords, mealVisualSets, smoothieVisualSets, smoothieAiHistory, mealPlanAiHistory, lifecycle] = await Promise.all([
     userRef.get(), userRef.collection("recipes").get(), userRef.collection("private").get(), userRef.collection("mealVisualSets").get(),
-    userRef.collection("smoothieVisualSets").get(), db.doc(`betaTesters/${uid}`).get(),
+    userRef.collection("smoothieVisualSets").get(), userRef.collection("smoothieAiHistory").get(),
+    userRef.collection("mealPlanAiHistory").get(), getSubscriberLifecycleRecords(uid),
   ]);
   return {
-    exportVersion: 1,
+    exportVersion: 2,
     exportedAt: new Date().toISOString(),
     account: { uid, email: request.auth.token.email || "", emailVerified: Boolean(request.auth.token.email_verified) },
     wellness: account.exists ? account.data() : null,
@@ -452,7 +487,21 @@ export const exportSubscriberData = onCall({ invoker: "public", enforceAppCheck 
     accountRecords: snapshotData(privateRecords),
     mealVisualSets: snapshotData(mealVisualSets),
     smoothieVisualSets: snapshotData(smoothieVisualSets),
-    betaAccess: betaAccess.exists ? ((record) => ({ email: record.email || "", tier: record.tier || 0, status: record.status || "", expiresAt: record.expiresAt || null, grantedAt: record.grantedAt || null, revokedAt: record.revokedAt || null }))(betaAccess.data()) : null,
+    smoothieAiHistory: snapshotData(smoothieAiHistory),
+    mealPlanAiHistory: snapshotData(mealPlanAiHistory),
+    accessAndOperations: {
+      betaAccess: documentData(lifecycle.betaAccess),
+      betaAdministrator: documentData(lifecycle.betaAdmin),
+      betaSignupRequest: documentData(lifecycle.betaSignupRequest),
+      foundingVipReservation: documentData(lifecycle.foundingReservation),
+      ownedVipHousehold: documentData(lifecycle.ownedHousehold),
+      memberVipHouseholds: documentsData(lifecycle.memberHouseholds),
+      vipHouseholdRequests: documentsData(lifecycle.householdRequests),
+      subscriptionLedger: documentsData(lifecycle.subscriptionLedger),
+      supportRequests: documentsData(lifecycle.supportRequests),
+      mailRecords: documentsData(lifecycle.mailRecords),
+      betaAdministratorAudit: documentsData(lifecycle.betaAdminAudit),
+    },
   };
 });
 
@@ -461,9 +510,13 @@ export const deleteSubscriberAccount = onCall({ secrets: [stripeSecret], invoker
   if (request.data?.confirmation !== "DELETE MY ACCOUNT") throw new HttpsError("invalid-argument", "Deletion confirmation did not match.");
   const userRef = db.doc(`users/${uid}`);
   const entitlement = (await userRef.collection("private").doc("entitlement").get()).data() || {};
+  const lifecycle = await getSubscriberLifecycleRecords(uid);
   if (entitlement.stripeSubscriptionId) {
     const stripe = new Stripe(stripeSecret.value());
-    try { await stripe.subscriptions.cancel(entitlement.stripeSubscriptionId); }
+    try {
+      const canceledSubscription = await stripe.subscriptions.cancel(entitlement.stripeSubscriptionId);
+      await recordSubscriptionCounts(uid, canceledSubscription, Number(entitlement.tier || 0));
+    }
     catch (error) {
       if (error?.code !== "resource_missing") {
         console.error("Subscription cancellation before account deletion failed", { uid, code: error?.code });
@@ -478,12 +531,34 @@ export const deleteSubscriberAccount = onCall({ secrets: [stripeSecret], invoker
     ]);
   }
   catch (error) { console.error("Meal image cleanup failed during account deletion", { uid, code: error?.code }); }
+
+  const ownedMemberUids = activeVipFamilyMemberUids(lifecycle.ownedHousehold);
+  await Promise.all(ownedMemberUids.map(async (memberUid) => {
+    const memberEntitlementRef = db.doc(`users/${memberUid}/private/entitlement`);
+    await db.runTransaction(async (transaction) => {
+      const memberEntitlement = (await transaction.get(memberEntitlementRef)).data() || {};
+      if (memberEntitlement.accessSource !== "vip-family" || memberEntitlement.householdOwnerUid !== uid) return;
+      transaction.set(memberEntitlementRef, {
+        tier: 0, status: "inactive", accessSource: "vip-family-owner-deleted",
+        householdOwnerUid: null, updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+  }));
+
+  await Promise.all(lifecycle.memberHouseholds.map((household) => household.ref.update({
+    memberUids: FieldValue.arrayRemove(uid), updatedAt: FieldValue.serverTimestamp(),
+  })));
+
+  const linkedDocuments = [
+    lifecycle.betaAccess, lifecycle.betaAdmin, lifecycle.betaSignupRequest,
+    lifecycle.foundingReservation, lifecycle.ownedHousehold,
+    ...lifecycle.householdRequests, ...lifecycle.subscriptionLedger,
+    ...lifecycle.supportRequests, ...lifecycle.mailRecords, ...lifecycle.betaAdminAudit,
+  ].filter((document) => document.exists !== false);
+  const writer = db.bulkWriter();
+  linkedDocuments.forEach((document) => writer.delete(document.ref));
+  await writer.close();
   await db.recursiveDelete(userRef);
-  await Promise.allSettled([
-    db.doc(`betaTesters/${uid}`).delete(),
-    db.doc(`betaAdmins/${uid}`).delete(),
-    db.doc(`betaSignupRequests/${uid}`).delete(),
-  ]);
   await getAuth().deleteUser(uid);
   return { deleted: true };
 });
