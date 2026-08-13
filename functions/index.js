@@ -5,6 +5,7 @@ import { getStorage } from "firebase-admin/storage";
 import { defineBoolean, defineJsonSecret, defineSecret, defineString } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as functionsV1 from "firebase-functions/v1";
 import { createHash, randomUUID } from "node:crypto";
@@ -16,6 +17,8 @@ import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema
 import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
+import { GoogleAuth } from "google-auth-library";
+import { backupReadiness, shouldReconcileLedger } from "./operations-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   buildKernelContext,
@@ -1215,4 +1218,141 @@ export const stripeWebhook = onRequest({ secrets: [stripeSecret, webhookSecret, 
     if (uid) await writeEntitlement(uid, subscription, prices);
   }
   response.status(200).send("ok");
+});
+
+async function acquireOperationLease(operationId, leaseMinutes = 30) {
+  const operationRef = db.doc(`systemOperations/${operationId}`);
+  const now = Date.now();
+  return db.runTransaction(async (transaction) => {
+    const current = (await transaction.get(operationRef)).data() || {};
+    if (Number(current.leaseUntil || 0) > now) return null;
+    const runId = randomUUID();
+    transaction.set(operationRef, {
+      runId, status: "running", startedAt: FieldValue.serverTimestamp(),
+      leaseUntil: now + leaseMinutes * 60 * 1000,
+    }, { merge: true });
+    return { operationRef, runId };
+  });
+}
+
+async function finishOperation(lease, result) {
+  if (!lease) return;
+  await lease.operationRef.set({
+    ...result, status: result.status || "completed", leaseUntil: 0,
+    completedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+async function queueOperationsAlert(id, subject, text) {
+  await db.doc(`mail/${id}`).set({
+    to: ["support@natureselixirz.com"], message: { subject, text },
+    category: "operations-autonomy-alert", createdAt: FieldValue.serverTimestamp(),
+  }, { merge: false });
+}
+
+async function deactivateMissingStripeSubscription(document) {
+  const record = document.data() || {};
+  const uid = record.uid;
+  if (!uid) return;
+  const metricsRef = db.doc("subscriptionMetrics/tierCounts");
+  const entitlementRef = db.doc(`users/${uid}/private/entitlement`);
+  await db.runTransaction(async (transaction) => {
+    const [metricsSnapshot, entitlementSnapshot] = await Promise.all([
+      transaction.get(metricsRef), transaction.get(entitlementRef),
+    ]);
+    const entitlement = entitlementSnapshot.data() || {};
+    if (entitlement.stripeSubscriptionId && entitlement.stripeSubscriptionId !== document.id) return;
+    const metrics = metricsSnapshot.data() || {};
+    const activeByTier = { ...(metrics.activeByTier || {}) };
+    if (record.counted && Number(record.tier || 0) > 0) {
+      activeByTier[String(record.tier)] = Math.max(0, Number(activeByTier[String(record.tier)] || 0) - 1);
+    }
+    transaction.set(metricsRef, { activeByTier, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(document.ref, { counted: false, status: "missing", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(entitlementRef, {
+      tier: 0, status: "inactive", accessSource: "stripe-reconciliation-missing",
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
+export const reconcileStripeEntitlements = onSchedule({
+  schedule: "every 12 hours", timeZone: "America/New_York", timeoutSeconds: 540,
+  secrets: [stripeSecret, stripePrices], retryCount: 1,
+}, async () => {
+  const lease = await acquireOperationLease("stripeEntitlementReconciliation", 45);
+  if (!lease) return;
+  const stripe = new Stripe(stripeSecret.value());
+  const ledgerSnapshot = await db.collection("subscriptionLedger").limit(500).get();
+  const records = ledgerSnapshot.docs.filter((document) => shouldReconcileLedger({ id: document.id, ...document.data() }));
+  let repaired = 0;
+  let missing = 0;
+  const failures = [];
+  for (let index = 0; index < records.length; index += 5) {
+    await Promise.all(records.slice(index, index + 5).map(async (document) => {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(document.id);
+        await writeEntitlement(document.data().uid, subscription, stripePrices.value());
+        repaired += 1;
+      } catch (error) {
+        if (error?.code === "resource_missing") {
+          await deactivateMissingStripeSubscription(document);
+          missing += 1;
+          return;
+        }
+        failures.push({ subscriptionId: document.id, code: String(error?.code || "unknown") });
+      }
+    }));
+  }
+  const result = { status: failures.length ? "attention-required" : "healthy", inspected: records.length, repaired, missing, failures: failures.slice(0, 20) };
+  await finishOperation(lease, result);
+  if (failures.length) {
+    const slot = new Date().toISOString().slice(0, 13).replace(/[-T]/g, "");
+    await queueOperationsAlert(`stripe-reconciliation-${slot}`, "Stripe entitlement reconciliation requires attention",
+      `${failures.length} subscription record(s) could not be reconciled. Inspected: ${records.length}. Review systemOperations/stripeEntitlementReconciliation and Cloud Function logs.`);
+  }
+  logger.info("billing.reconciliation.completed", result);
+});
+
+async function firestoreApiGet(path) {
+  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+  const client = await auth.getClient();
+  const { token } = await client.getAccessToken();
+  const response = await fetch(`https://firestore.googleapis.com/v1/${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Firestore Admin API returned ${response.status}`);
+  return response.json();
+}
+
+export const validateFirestoreBackupReadiness = onSchedule({
+  schedule: "every 12 hours", timeZone: "America/New_York", timeoutSeconds: 120, retryCount: 1,
+}, async () => {
+  const lease = await acquireOperationLease("firestoreBackupValidation", 15);
+  if (!lease) return;
+  const projectId = process.env.GCLOUD_PROJECT || "natures-elixirz-os";
+  const databaseName = `projects/${projectId}/databases/(default)`;
+  try {
+    const payload = await firestoreApiGet(`projects/${projectId}/locations/nam5/backups?pageSize=100`);
+    const readiness = backupReadiness(payload.backups || [], databaseName);
+    const status = {
+      status: readiness.healthy ? "healthy" : "attention-required",
+      reason: readiness.reason, latestBackup: readiness.backup?.name || null,
+      snapshotTime: readiness.backup?.snapshotTime || null,
+      expireTime: readiness.backup?.expireTime || null,
+      ageHours: readiness.ageHours == null ? null : Math.round(readiness.ageHours * 10) / 10,
+      restoreTargetPolicy: "new-isolated-database-only",
+    };
+    await finishOperation(lease, status);
+    if (!readiness.healthy) {
+      const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      await queueOperationsAlert(`firestore-backup-${day}-${readiness.reason}`,
+        "Firestore backup readiness requires attention",
+        `Backup validation reported ${readiness.reason}. Production was not modified. Review systemOperations/firestoreBackupValidation and the Firestore Disaster Recovery console.`);
+    }
+    logger.info("recovery.firestore_backup.validated", status);
+  } catch (error) {
+    await finishOperation(lease, { status: "failed", reason: String(error?.message || error).slice(0, 300) });
+    throw error;
+  }
 });
