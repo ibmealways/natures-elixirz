@@ -52,6 +52,15 @@ export const smoothieProtocols = {
       { name: "Unsweetened soy milk", group: "Liquid", amount16: 0.75, unit: "cup" },
     ], benefits: ["calorie density", "protein", "complex carbohydrate", "unsaturated fats"], nutrition16: { calories: 565, protein: 31, fiber: 11, totalSugar: 27 },
   },
+  weightLoss: {
+    name: "Fiber-Forward Berry Balance", description: "A moderate-calorie, protein-and-fiber smoothie intended to support fullness as part of a balanced eating pattern; it is not a weight-loss treatment.",
+    ingredients: [
+      { name: "Frozen mixed berries", group: "Fruit", amount16: 0.75, unit: "cup" }, { name: "Apple", group: "Fruit", amount16: 0.5, unit: "medium" },
+      { name: "Baby spinach", group: "Vegetable", amount16: 1, unit: "cup" }, { name: "Plain Greek yogurt", group: "Protein", amount16: 0.5, unit: "cup" },
+      { name: "Ground flaxseed", group: "Seed", amount16: 1, unit: "tbsp" }, { name: "Water", group: "Liquid", amount16: 0.75, unit: "cup" },
+      { name: "Ice", group: "Liquid", amount16: 0.5, unit: "cup" },
+    ], benefits: ["protein", "whole-food fiber", "colorful produce", "no added sugar"], nutrition16: { calories: 275, protein: 16, fiber: 10, totalSugar: 22 },
+  },
   hydration: {
     name: "Hydration Garden Blend", description: "A fluid-rich cucumber, pineapple, and citrus blend for everyday hydration support.",
     ingredients: [

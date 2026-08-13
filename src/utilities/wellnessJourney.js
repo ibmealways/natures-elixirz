@@ -1,7 +1,7 @@
 const JOURNEY_KEY = "naturesElixirz.journey.v2";
 const keyFor = (scope = "guest") => `${JOURNEY_KEY}.${scope}`;
 
-export const VALID_GOALS = ["focus", "energy", "mindfulness", "painSupport", "calm", "heart", "circulation", "digestion", "inflammation", "general", "cellular", "liver", "kidney", "lungs", "eyes", "bones", "muscles", "joints", "skin", "immune", "blood", "nervous", "metabolic"];
+export const VALID_GOALS = ["focus", "energy", "mindfulness", "painSupport", "calm", "heart", "circulation", "digestion", "inflammation", "general", "cellular", "liver", "kidney", "lungs", "eyes", "bones", "muscles", "protein", "healthyWeight", "weightLoss", "joints", "skin", "immune", "blood", "nervous", "metabolic"];
 
 const movementMap = {
   JOINT_REPAIR: { goal: "painSupport", frequencyHz: 174, mealGoal: "general", taiChiFocus: "recovery" },

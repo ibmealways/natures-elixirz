@@ -29,7 +29,7 @@ export default function GlowNav() {
       <div className="glow-nav-stack">
         <div className="glow-nav-utility">
           <div className="account-utility">
-            {loading ? <span><UserCircle size={16} /> Loading account…</span> : user ? <><span title={user.email}><UserCircle size={16} /> {user.email}</span><button type="button" onClick={signOut}><LogOut size={15} /> {t("signOut")}</button></> : <Link to="/account"><LogIn size={16} /> {t("signIn")}</Link>}
+            {loading ? <span><UserCircle size={16} /> Loading account…</span> : user ? <><span title={user.email}><UserCircle size={16} /> {user.email}</span><button type="button" onClick={signOut}><LogOut size={15} /> {t("signOut")}</button></> : <Link to="/account#account-access"><LogIn size={16} /> {t("signIn")}</Link>}
           </div>
           <label className="language-selector"><Languages size={15} /><span>{t("language")}</span><select aria-label={t("language")} value={language} onChange={(event) => setLanguage(event.target.value)}>{languages.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label>
         </div>

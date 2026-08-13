@@ -1,0 +1,11 @@
+.health-conditions-field {
+  grid-column: 1 / -1;
+}
+
+.health-conditions-field > small {
+  color: #78918d;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+}

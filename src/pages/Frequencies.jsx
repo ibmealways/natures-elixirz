@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AudioLines,
   Headphones,
@@ -115,16 +115,129 @@ const frequencies = [
   },
 ];
 
+const extendedFrequencies = [
+  {
+    hz: 40,
+    title: "Low Focus Pulse",
+    plane: "Deep Focus Chamber",
+    realm: "azure",
+    goals: ["focus"],
+    note: "A very low audible tone for optional focused listening. Research on 40 Hz sensory stimulation is still developing and this preview is not treatment.",
+    experience: "Low, steady, and minimal",
+  },
+  {
+    hz: 128,
+    title: "Quiet Foundation",
+    plane: "Stillwater Foundation",
+    realm: "verdant",
+    goals: ["calm"],
+    note: "A low musical reference tone for quiet breathing, reflection, or gentle ambient listening.",
+    experience: "Deep, calm, and unhurried",
+  },
+  {
+    hz: 136,
+    title: "Earth-Year Tone",
+    plane: "Earth Orbit Sanctuary",
+    realm: "ember",
+    goals: ["mindfulness"],
+    note: "An approximately 136.1 Hz tone sometimes used in meditative music and sound traditions.",
+    experience: "Earthy, resonant, and contemplative",
+  },
+  {
+    hz: 256,
+    title: "Middle C Resonance",
+    plane: "Harmonic Compass",
+    realm: "amber",
+    goals: ["general"],
+    note: "A scientific-pitch reference for middle C, useful as a simple musical listening anchor.",
+    experience: "Balanced, musical, and centered",
+  },
+  {
+    hz: 417,
+    title: "Transition",
+    plane: "Copper Passage",
+    realm: "rose",
+    goals: ["calm"],
+    note: "A popular symbolic playlist frequency for transition rituals and reflective listening.",
+    experience: "Warm, changing, and reflective",
+  },
+  {
+    hz: 440,
+    title: "Concert Pitch",
+    plane: "Orchestral Beacon",
+    realm: "solar",
+    goals: ["focus", "general"],
+    note: "The common A4 tuning reference used by many modern instruments and ensembles.",
+    experience: "Clear, familiar, and musical",
+  },
+  {
+    hz: 723,
+    title: "July 23 Signature Tone",
+    plane: "Founder’s Birthday Star",
+    realm: "luminous",
+    goals: ["mindfulness", "general"],
+    note: "Nature’s Elixirz founder signature tone, inspired by the July 23 birthday date. It is a personal and symbolic listening choice rather than a medical frequency.",
+    experience: "Personal, celebratory, and luminous",
+  },
+  {
+    hz: 888,
+    title: "Octave Reflection",
+    plane: "Infinite Mirror",
+    realm: "indigo",
+    goals: ["mindfulness"],
+    note: "A high symbolic tone for short meditation or reflection; begin at a very low volume.",
+    experience: "Bright, spacious, and symbolic",
+  },
+  ...[1111, 2222, 3333, 4444, 5555].map((hz, index) => ({
+    hz,
+    title: `${String(index + 1).repeat(4)} Symbolic Tone`,
+    plane: `Number Path ${String(index + 1).padStart(2, "0")}`,
+    realm: ["luminous", "azure", "violet", "rose", "solar"][index],
+    goals: ["mindfulness"],
+    note: `${hz} Hz is offered as a symbolic listening choice. Repeating-number traditions are cultural or spiritual interpretations, not established medical effects.`,
+    experience: "High, brief, and symbolic",
+  })),
+];
+
+const allFrequencies = [...frequencies, ...extendedFrequencies];
+
+function readStoredJson(key) {
+  for (const storage of [sessionStorage, localStorage]) {
+    try {
+      const raw = storage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser sessions.
+    }
+  }
+  return null;
+}
+
+function readStoredValue(key) {
+  for (const storage of [sessionStorage, localStorage]) {
+    try {
+      const value = storage.getItem(key);
+      if (value) return value;
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser sessions.
+    }
+  }
+  return "";
+}
+
 export default function Frequencies() {
   const { user } = useAuth();
   const storageScope = user?.uid || "guest";
   const unlocked = useTierAccess(2);
   const [params] = useSearchParams();
+  const source = params.get("source") || "frequency";
+  const smoothieContext = readStoredJson("naturesElixirz.latestSmoothieContext") || {};
   const movement = getMovementContinuation(storageScope) || {};
   const goal =
     params.get("goal") ||
+    smoothieContext.goal ||
     movement.goal ||
-    sessionStorage.getItem("naturesElixirz.latestSmoothieGoal") ||
+    readStoredValue("naturesElixirz.latestSmoothieGoal") ||
     "general";
   const recommended =
     frequencies.find((frequency) => frequency.goals.includes(goal)) ||
@@ -137,8 +250,8 @@ export default function Frequencies() {
       ?.match(/\d+/)?.[0],
   );
   const [selected, setSelected] = useState(
-    frequencies.find((frequency) => frequency.hz === requestedHz) ||
-      frequencies.find((frequency) => frequency.hz === rememberedHz) ||
+    allFrequencies.find((frequency) => frequency.hz === requestedHz) ||
+      allFrequencies.find((frequency) => frequency.hz === rememberedHz) ||
       recommended,
   );
   const [playing, setPlaying] = useState(false);
@@ -195,6 +308,22 @@ export default function Frequencies() {
     if (playing) play(durationRef.current);
   }, [selected]);
 
+  const selectedVideoId = getFrequencyVideoId(selected.hz);
+
+  useEffect(() => {
+    const context = {
+      hz: selected.hz,
+      title: selected.title,
+      goal,
+      source,
+      smoothieRecipeName: smoothieContext.recipeName || "",
+      updatedAt: new Date().toISOString(),
+    };
+    for (const storage of [sessionStorage, localStorage]) {
+      try { storage.setItem("naturesElixirz.latestFrequencyContext", JSON.stringify(context)); } catch {}
+    }
+  }, [goal, selected.hz, selected.title, smoothieContext.recipeName, source]);
+
   return (
     <div
       className={`cosmic-page-shell resonate-cosmos realm-${selected.realm}`}
@@ -213,7 +342,8 @@ export default function Frequencies() {
             </div>
             <div className="resonate-intro">
               <p>
-                Travel through nine distinct listening realms. Each tone can
+                Travel through nine featured realms and an extended tone
+                library. Each option can
                 accompany smoothie preparation, breathwork, meditation, or
                 reflection—never medical treatment.
               </p>
@@ -228,7 +358,7 @@ export default function Frequencies() {
             aria-label="Celestial observatory surrounded by nine colorful floating astroplanes"
           >
             <span>
-              <Radio size={15} /> Nine planes online
+              <Radio size={15} /> {allFrequencies.length} tones online
             </span>
           </div>
         </header>
@@ -268,12 +398,8 @@ export default function Frequencies() {
             <div className="smoothie-pairing">
               <GlassPairing />
               <span>
-                <small>Your smoothie alignment</small>
-                <strong>
-                  {recommended.hz === selected.hz
-                    ? `Recommended for ${goal}`
-                    : `${recommended.hz} Hz · ${recommended.title} is recommended for ${goal}`}
-                </strong>
+                <small>Your smoothie + listening alignment</small>
+                <strong>{selected.hz} Hz · {selected.title} pairs with the selected video</strong>
               </span>
             </div>
             <div className="frequency-actions">
@@ -283,13 +409,28 @@ export default function Frequencies() {
               </button>
               <button
                 type="button"
+                disabled={!selectedVideoId}
+                title={
+                  selectedVideoId
+                    ? "Open the matching ambient video"
+                    : "No verified matching video is assigned to this tone"
+                }
                 onClick={() => {
                   stop();
                   setVideoOpen(true);
                 }}
               >
-                <Youtube size={17} /> Watch frequency video here
+                <Youtube size={17} />
+                {selectedVideoId
+                  ? "Watch frequency video here"
+                  : "Use exact tone preview"}
               </button>
+              <Link
+                className="frequency-tier-link"
+                to={`/meals?goal=${encodeURIComponent(goal)}&source=frequency`}
+              >
+                Preview Tier 3 meal pairing
+              </Link>
             </div>
           </div>
         </section>
@@ -327,6 +468,46 @@ export default function Frequencies() {
               </button>
             ))}
           </div>
+          <details className="extended-frequency-library">
+            <summary>
+              <span>
+                <Waves size={18} /> Explore extended Hz library
+              </span>
+              <small>{extendedFrequencies.length} additional tones</small>
+            </summary>
+            <div className="extended-frequency-controls">
+              <label htmlFor="extended-frequency-select">
+                Choose an additional listening tone
+              </label>
+              <select
+                id="extended-frequency-select"
+                value={
+                  extendedFrequencies.some(({ hz }) => hz === selected.hz)
+                    ? selected.hz
+                    : ""
+                }
+                onChange={(event) => {
+                  const next = extendedFrequencies.find(
+                    ({ hz }) => hz === Number(event.target.value),
+                  );
+                  if (next) setSelected(next);
+                }}
+              >
+                <option value="">Select a frequency...</option>
+                {extendedFrequencies.map((frequency) => (
+                  <option key={frequency.hz} value={frequency.hz}>
+                    {frequency.hz} Hz — {frequency.title}
+                  </option>
+                ))}
+              </select>
+              <p>
+                Repeating-number tones such as 1111 Hz and 2222 Hz are
+                included as symbolic listening preferences. Frequency labels
+                do not establish a medical or healing effect. Keep high tones
+                brief and at a comfortable low volume.
+              </p>
+            </div>
+          </details>
         </section>
 
         <section className="frequency-member-panel">
@@ -406,7 +587,7 @@ export default function Frequencies() {
           open={videoOpen}
           onClose={() => setVideoOpen(false)}
           title={`${selected.hz} Hz ambient video library`}
-          videoId={getFrequencyVideoId(selected.hz)}
+          videoId={selectedVideoId}
           note="YouTube content is presented for optional ambient listening. Frequency labels are not medical claims or treatment recommendations."
         />
       </main>

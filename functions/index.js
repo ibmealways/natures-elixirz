@@ -1,19 +1,21 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { defineBoolean, defineJsonSecret, defineSecret, defineString } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
+import { user as authUser } from "firebase-functions/v1/auth";
 import { createHash, randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import Stripe from "stripe";
-import { priceKey, tierFromPrice } from "./subscription.js";
+import { billingModeFromPrice, hasActiveBetaTestingAccess, priceKey, tierFromPrice, validatePlanningSelection } from "./subscription.js";
 import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
-import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, validateMealPlanProposal } from "./meal-plan-ai.js";
+import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
+  buildKernelContext,
   buildJourneyContext,
   buildProfileContext,
   hasTierAccess,
@@ -28,11 +30,72 @@ const webhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 const appUrl = defineString("APP_URL", { default: "http://localhost:5173" });
 const stripePrices = defineJsonSecret("STRIPE_PRICES");
 const openaiSecret = defineSecret("OPENAI_API_KEY");
+const youtubeDataApiSecret = defineSecret("YOUTUBE_DATA_API_KEY");
 const openaiModel = defineString("OPENAI_MODEL", { default: "gpt-5.6-terra" });
 const openaiImageModel = defineString("OPENAI_IMAGE_MODEL", { default: "gpt-image-2" });
 const enforceAppCheck = defineBoolean("ENFORCE_APP_CHECK", { default: false });
 const VIP_FAMILY_OFFER_LIMIT = 5000;
 const VIP_FAMILY_SEAT_LIMIT = 2;
+
+export const newAccountApprovalAlert = authUser().onCreate(async (userRecord) => {
+  const email = String(userRecord.email || "").trim().toLowerCase();
+  if (!email) return;
+  const requestRef = db.doc(`betaSignupRequests/${userRecord.uid}`);
+  if ((await requestRef.get()).exists) return;
+  const createdAtIso = userRecord.metadata?.creationTime || new Date().toISOString();
+  const batch = db.batch();
+  batch.set(requestRef, {
+    uid: userRecord.uid, email, displayName: userRecord.displayName || "",
+    emailVerified: Boolean(userRecord.emailVerified), status: "pending",
+    source: "firebase-auth", createdAtIso,
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  batch.set(db.collection("mail").doc(), {
+    to: ["support@natureselixirz.com"],
+    message: {
+      subject: "New Nature's Elixirz account awaiting beta approval",
+      text: `A new Nature's Elixirz account is waiting for beta authorization.\n\nEmail: ${email}\nCreated: ${createdAtIso}\n\nOpen Beta Admin: https://natures-elixirz-os.web.app/beta-admin`,
+    },
+    category: "new-beta-account-alert", accountUid: userRecord.uid,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+});
+
+export const searchTaiChiYouTube = onCall({
+  secrets: [youtubeDataApiSecret], invoker: "public", enforceAppCheck, timeoutSeconds: 30,
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to search guided Tai Chi videos.");
+  const rawQuery = String(request.data?.query || "").replace(/\s+/g, " ").trim();
+  if (rawQuery.length < 2 || rawQuery.length > 80) throw new HttpsError("invalid-argument", "Enter a Tai Chi movement between 2 and 80 characters.");
+  const normalizedQuery = rawQuery.toLowerCase().includes("tai chi") ? rawQuery : `Tai Chi ${rawQuery}`;
+  const cacheKey = createHash("sha256").update(normalizedQuery.toLowerCase()).digest("hex");
+  const cacheRef = db.doc(`youtubeSearchCache/${cacheKey}`);
+  const cachedData = (await cacheRef.get()).data();
+  if (cachedData?.createdAt?.toMillis?.() > Date.now() - 6 * 60 * 60 * 1000 && Array.isArray(cachedData.results)) {
+    return { query: normalizedQuery, results: cachedData.results, cached: true };
+  }
+  const endpoint = new URL("https://www.googleapis.com/youtube/v3/search");
+  endpoint.search = new URLSearchParams({
+    part: "snippet", q: normalizedQuery, type: "video", maxResults: "8", safeSearch: "strict",
+    videoEmbeddable: "true", videoSyndicated: "true", relevanceLanguage: "en", key: youtubeDataApiSecret.value(),
+  }).toString();
+  const response = await fetch(endpoint);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    logger.error("YouTube Tai Chi search failed", { status: response.status, reason: payload?.error?.message });
+    throw new HttpsError("unavailable", "YouTube search is temporarily unavailable. Please try again shortly.");
+  }
+  const results = (Array.isArray(payload.items) ? payload.items : []).filter((item) => item?.id?.videoId).map((item) => ({
+    key: `youtube-${item.id.videoId}`, videoId: item.id.videoId,
+    title: String(item.snippet?.title || "Tai Chi lesson").slice(0, 180),
+    channelTitle: String(item.snippet?.channelTitle || "YouTube instructor").slice(0, 100),
+    thumbnail: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || "",
+    youtubeUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+  }));
+  await cacheRef.set({ query: normalizedQuery, results, createdAt: FieldValue.serverTimestamp() });
+  return { query: normalizedQuery, results, cached: false };
+});
 
 function verificationEmailHtml(link) {
   return `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:32px;color:#10241f"><p style="font-size:12px;letter-spacing:2px;color:#087f65">NATURE'S ELIXIRZ OS</p><h1 style="font-size:30px">Verify your email address</h1><p>Welcome to Nature's Elixirz. Confirm this email address to protect your wellness profile and unlock subscriber features.</p><p style="margin:30px 0"><a href="${link}" style="background:#12b886;color:#fff;padding:14px 22px;border-radius:999px;text-decoration:none;font-weight:700">Verify my email</a></p><p style="font-size:13px;color:#53645f">If you did not create this account, you can safely ignore this message. Nature's Elixirz will never ask for your password by email.</p></div>`;
@@ -108,6 +171,9 @@ async function updateVipFamilyEntitlements(ownerUid, ownerEntitlement) {
     householdOwnerUid: ownerUid,
     giftsEligible: false,
     canGenerateImages: false,
+    billingMode: ownerEntitlement?.billingMode || "monthly",
+    currentPeriodStart: ownerEntitlement?.currentPeriodStart || null,
+    currentPeriodEnd: ownerEntitlement?.currentPeriodEnd || null,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true }));
   await batch.commit();
@@ -175,7 +241,9 @@ async function consumeMealVisualGeneration(uid) {
   });
 }
 
-async function consumeMealPlanGeneration(uid) {
+async function consumeMealPlanGeneration(uid, entitlement = {}) {
+  const owner = await db.doc(`betaAdmins/${uid}`).get();
+  if (owner.data()?.enabled === true || hasActiveBetaTestingAccess(entitlement)) return;
   const usageRef = db.doc(`users/${uid}/private/mealPlanUsage`);
   const today = new Date().toISOString().slice(0, 10);
   await db.runTransaction(async (transaction) => {
@@ -199,6 +267,91 @@ function safeTester(testUser, record = {}) {
   return { uid: testUser.uid, email: testUser.email || record.email || "", emailVerified: Boolean(testUser.emailVerified), status: expired ? "expired" : record.status || "not-granted", tier: expired ? 0 : Number(record.tier || 0), expiresAt: expiration, grantedAt: record.grantedAt || null };
 }
 
+function cleanMailText(value, maximum, fieldName) {
+  const text = String(value || "").replace(/\r\n/g, "\n").trim();
+  if (!text || text.length > maximum) {
+    throw new HttpsError("invalid-argument", `${fieldName} is required and must be ${maximum} characters or fewer.`);
+  }
+  return text;
+}
+
+export const submitSupportRequest = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before contacting subscriber support.");
+  const email = String(request.auth.token.email || "").trim().toLowerCase();
+  if (!email) throw new HttpsError("failed-precondition", "This account does not have an email address.");
+  const category = cleanMailText(request.data?.category, 50, "Category");
+  const subject = cleanMailText(request.data?.subject, 140, "Subject");
+  const message = cleanMailText(request.data?.message, 5000, "Message");
+  const now = Date.now();
+  const usageRef = db.doc(`users/${request.auth.uid}/private/supportRequestUsage`);
+  await db.runTransaction(async (transaction) => {
+    const prior = (await transaction.get(usageRef)).data() || {};
+    if (now - Number(prior.lastSubmittedAt || 0) < 30_000) {
+      throw new HttpsError("resource-exhausted", "Please wait 30 seconds before sending another support request.");
+    }
+    transaction.set(usageRef, { lastSubmittedAt: now, requestCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  });
+  const caseId = `NE-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const batch = db.batch();
+  batch.set(db.doc(`supportRequests/${caseId}`), {
+    caseId, uid: request.auth.uid, email, category, subject, message,
+    status: "new", createdAt: FieldValue.serverTimestamp(), source: "subscriber-support-center",
+  });
+  batch.set(db.collection("mail").doc(), {
+    to: ["support@natureselixirz.com"],
+    message: {
+      replyTo: email,
+      subject: `[${caseId}] ${category}: ${subject}`,
+      text: `Support case: ${caseId}\nSubscriber: ${email}\nCategory: ${category}\n\n${message}`,
+    }, category: "subscriber-support-request", caseId, uid: request.auth.uid, createdAt: FieldValue.serverTimestamp(),
+  });
+  batch.set(db.collection("mail").doc(), {
+    to: [email],
+    message: {
+      subject: `Nature's Elixirz support request received - ${caseId}`,
+      text: `We received your ${category.toLowerCase()} report. Your reference number is ${caseId}. Support will reply to ${email}.\n\nYour message:\n${message}`,
+    }, category: "subscriber-support-confirmation", caseId, uid: request.auth.uid, createdAt: FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+  return { submitted: true, caseId };
+});
+
+export const sendBetaTesterUpdate = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  const adminUid = await requireBetaAdmin(request);
+  const audience = String(request.data?.audience || "active");
+  const subject = cleanMailText(request.data?.subject, 140, "Subject");
+  const message = cleanMailText(request.data?.message, 50000, "Message");
+  let recipients = [];
+  if (audience === "self") {
+    recipients = [String(request.auth.token.email || "").trim().toLowerCase()];
+  } else if (audience === "one") {
+    const email = cleanMailText(request.data?.email, 254, "Tester email").toLowerCase();
+    const tester = await getAuth().getUserByEmail(email).catch(() => null);
+    const record = tester ? (await db.doc(`betaTesters/${tester.uid}`).get()).data() : null;
+    if (!tester || record?.status !== "active" || (record.expiresAt && Date.parse(record.expiresAt) <= Date.now())) {
+      throw new HttpsError("not-found", "That email is not an active beta tester.");
+    }
+    recipients = [email];
+  } else if (audience === "active") {
+    const snapshot = await db.collection("betaTesters").where("status", "==", "active").limit(100).get();
+    recipients = snapshot.docs.map((document) => document.data()).filter((record) => !record.expiresAt || Date.parse(record.expiresAt) > Date.now()).map((record) => String(record.email || "").trim().toLowerCase()).filter(Boolean);
+  } else {
+    throw new HttpsError("invalid-argument", "Choose a valid beta tester audience.");
+  }
+  recipients = [...new Set(recipients.filter(Boolean))];
+  if (!recipients.length) throw new HttpsError("failed-precondition", "No eligible recipients were found.");
+  const updateId = randomUUID();
+  const batch = db.batch();
+  recipients.forEach((to) => batch.set(db.collection("mail").doc(), {
+    to: [to],
+    message: { replyTo: "support@natureselixirz.com", subject, text: `${message}\n\nNature's Elixirz Beta Testing Team\nsupport@natureselixirz.com` },
+    category: "beta-tester-update", updateId, createdAt: FieldValue.serverTimestamp(),
+  }));
+  batch.set(db.collection("betaAdminAudit").doc(), { action: "send-beta-update", adminUid, audience, recipientCount: recipients.length, subject, updateId, createdAt: FieldValue.serverTimestamp() });
+  await batch.commit();
+  return { queued: true, recipientCount: recipients.length, updateId };
+});
+
 export const manageBetaTesters = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
   const adminUid = await requireBetaAdmin(request);
   const action = String(request.data?.action || "list");
@@ -210,6 +363,19 @@ export const manageBetaTesters = onCall({ invoker: "public", enforceAppCheck }, 
       catch { return { uid: document.id, email: document.data().email || "", emailVerified: false, status: "account-missing", tier: 0, expiresAt: document.data().expiresAt || null }; }
     }));
     return { testers };
+  }
+  if (action === "pending") {
+    const snapshot = await db.collection("betaSignupRequests").limit(100).get();
+    const requests = snapshot.docs.map((document) => {
+      const record = document.data();
+      return {
+        uid: document.id, email: record.email || "", displayName: record.displayName || "",
+        emailVerified: Boolean(record.emailVerified), status: record.status || "pending",
+        createdAt: record.createdAtIso || record.createdAt?.toDate?.().toISOString?.() || null,
+      };
+    }).filter((record) => record.status === "pending")
+      .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+    return { requests };
   }
   if (action === "reach") {
     const snapshot = await db.collection("users").select("profile.reach").get();
@@ -230,6 +396,7 @@ export const manageBetaTesters = onCall({ invoker: "public", enforceAppCheck }, 
     const batch = db.batch();
     batch.set(db.doc(`users/${testUser.uid}/private/entitlement`), { tier: 5, status: "active", accessSource: "beta-testing", betaExpiresAt: expiresAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     batch.set(db.doc(`betaTesters/${testUser.uid}`), { email, tier: 5, status: "active", expiresAt, grantedAt: now, grantedBy: adminUid, emailVerified: testUser.emailVerified }, { merge: true });
+    batch.set(db.doc(`betaSignupRequests/${testUser.uid}`), { email, emailVerified: testUser.emailVerified, status: "approved", reviewedAt: now, reviewedBy: adminUid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     batch.set(db.collection("betaAdminAudit").doc(), { action: "grant", testerUid: testUser.uid, testerEmail: email, expiresAt, adminUid, createdAt: FieldValue.serverTimestamp() });
     await batch.commit();
     return { tester: safeTester(testUser, { tier: 5, status: "active", expiresAt, grantedAt: now }) };
@@ -239,9 +406,18 @@ export const manageBetaTesters = onCall({ invoker: "public", enforceAppCheck }, 
     const batch = db.batch();
     batch.set(db.doc(`users/${testUser.uid}/private/entitlement`), { tier: 0, status: "inactive", accessSource: "beta-revoked", betaExpiresAt: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     batch.set(db.doc(`betaTesters/${testUser.uid}`), { email, tier: 0, status: "revoked", revokedAt: now, revokedBy: adminUid }, { merge: true });
+    batch.set(db.doc(`betaSignupRequests/${testUser.uid}`), { email, status: "revoked", reviewedAt: now, reviewedBy: adminUid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     batch.set(db.collection("betaAdminAudit").doc(), { action: "revoke", testerUid: testUser.uid, testerEmail: email, adminUid, createdAt: FieldValue.serverTimestamp() });
     await batch.commit();
     return { tester: safeTester(testUser, { tier: 0, status: "revoked" }) };
+  }
+  if (action === "deny") {
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    batch.set(db.doc(`betaSignupRequests/${testUser.uid}`), { email, status: "denied", reviewedAt: now, reviewedBy: adminUid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    batch.set(db.collection("betaAdminAudit").doc(), { action: "deny", testerUid: testUser.uid, testerEmail: email, adminUid, createdAt: FieldValue.serverTimestamp() });
+    await batch.commit();
+    return { tester: safeTester(testUser, { tier: 0, status: "denied" }) };
   }
   throw new HttpsError("invalid-argument", "Unknown beta administration action.");
 });
@@ -306,6 +482,7 @@ export const deleteSubscriberAccount = onCall({ secrets: [stripeSecret], invoker
   await Promise.allSettled([
     db.doc(`betaTesters/${uid}`).delete(),
     db.doc(`betaAdmins/${uid}`).delete(),
+    db.doc(`betaSignupRequests/${uid}`).delete(),
   ]);
   await getAuth().deleteUser(uid);
   return { deleted: true };
@@ -337,13 +514,15 @@ async function consumeAstraMessage(uid) {
   });
 }
 
-async function consumeSmoothieRecipeGeneration(uid) {
+async function consumeSmoothieRecipeGeneration(uid, entitlement = {}) {
+  const owner = await db.doc(`betaAdmins/${uid}`).get();
+  if (owner.data()?.enabled === true || hasActiveBetaTestingAccess(entitlement)) return;
   const usageRef = db.doc(`users/${uid}/private/smoothieRecipeUsage`);
   const today = new Date().toISOString().slice(0, 10);
   await db.runTransaction(async (transaction) => {
     const usage = (await transaction.get(usageRef)).data() || {};
     const count = usage.day === today ? Number(usage.count || 0) : 0;
-    if (count >= 20) throw new HttpsError("resource-exhausted", "Daily AI smoothie limit reached. Saved recipes remain available.");
+    if (count >= 3) throw new HttpsError("resource-exhausted", "Your three smoothie generations for today have been used. Saved recipes remain available; return tomorrow for three new formulas.");
     transaction.set(usageRef, { day: today, count: count + 1, updatedAt: FieldValue.serverTimestamp() });
   });
 }
@@ -367,15 +546,38 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
 
   const includeProfile = request.data?.includeProfile === true;
   const includeSensitive = includeProfile && request.data?.includeSensitive === true;
+  const includeKernelContext = request.data?.includeKernelContext === true;
   const profileContext = includeProfile
     ? buildProfileContext(request.data?.profile, includeSensitive)
     : null;
   const journeyContext = includeProfile
     ? buildJourneyContext(request.data?.journey)
     : null;
+  let kernelContext = null;
+  try {
+    kernelContext = includeKernelContext ? buildKernelContext(request.data?.kernelContext) : null;
+  } catch (error) {
+    throw new HttpsError("invalid-argument", error.message);
+  }
   const supportedLanguages = new Set(["English", "Español", "Français", "Português", "Deutsch", "中文", "العربية", "हिन्दी"]);
   const languageCandidate = String(request.data?.languageName || "English");
   const requestedLanguage = supportedLanguages.has(languageCandidate) ? languageCandidate : "English";
+  const attachmentContent = conversation.attachments.map((attachment) => {
+    if (attachment.kind === "image") {
+      return { type: "input_image", image_url: attachment.dataUrl, detail: "auto" };
+    }
+    if (attachment.type === "application/pdf") {
+      return { type: "input_file", filename: attachment.name, file_data: attachment.dataUrl };
+    }
+    return {
+      type: "input_text",
+      text: `Attached file \"${attachment.name}\":\n${attachment.text}`,
+    };
+  });
+  const userContent = [
+    { type: "input_text", text: conversation.message || "Please review the attached item." },
+    ...attachmentContent,
+  ];
   const input = [
     ...conversation.history,
     ...(profileContext ? [{
@@ -386,8 +588,12 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
       role: "user",
       content: `Optional cross-tier journey context (use only when relevant): ${JSON.stringify(journeyContext)}`,
     }] : []),
+    ...(kernelContext && Object.keys(kernelContext).length ? [{
+      role: "user",
+      content: `Subscriber-approved read-only Kernel context (use only when relevant; never claim to modify it): ${JSON.stringify(kernelContext)}`,
+    }] : []),
     { role: "user", content: `Reply in ${requestedLanguage}. Keep ingredient names and measurements unambiguous.` },
-    { role: "user", content: conversation.message },
+    { role: "user", content: userContent },
   ];
 
   const client = new OpenAI({ apiKey: openaiSecret.value() });
@@ -425,7 +631,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
     .filter((item, index, all) => all.findIndex((candidate) => candidate.name === item.name) === index)
     .slice(0, 12);
   const context = buildSmoothieAiContext(account.profile, request.data || {}, recentRecipes, account.kitchen || {});
-  await consumeSmoothieRecipeGeneration(uid);
+  await consumeSmoothieRecipeGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   let validationFeedback = "";
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -465,10 +671,12 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   const uid = request.auth.uid;
   const entitlement = (await db.doc(`users/${uid}/private/entitlement`).get()).data();
   if (!hasTierAccess(entitlement, 3)) throw new HttpsError("permission-denied", "Tier 3 access is required for AI meal planning.");
+  try { validatePlanningSelection(entitlement, request.data || {}); }
+  catch (error) { throw new HttpsError("failed-precondition", error.message); }
   const account = (await db.doc(`users/${uid}`).get()).data() || {};
   if (!account.profile?.completedAt || !account.profile?.name) throw new HttpsError("failed-precondition", "Complete and synchronize your profile before generating.");
   const context = buildMealPlanContext(account.profile, request.data || {});
-  await consumeMealPlanGeneration(uid);
+  await consumeMealPlanGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   let feedback = "Generate the requested meal plan now.";
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -485,7 +693,7 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
       const plan = validateMealPlanProposal(JSON.parse(response.output_text), context);
       await db.collection(`users/${uid}/mealPlanAiHistory`).add({ goal: context.goal, days: context.days, summary: response.output_text.slice(0, 500), createdAt: FieldValue.serverTimestamp() });
       logger.info("ai.meal_plan.generated", { uid, goal: context.goal, days: context.days, attempt: attempt + 1 });
-      return { plan, medicationSafety: JSON.parse(response.output_text).medicationSafety, source: "openai", model: response.model || openaiModel.value() };
+      return { plan, nutritionIntelligence: summarizeMealPlanIntelligence(plan, context), medicationSafety: JSON.parse(response.output_text).medicationSafety, source: "openai", model: response.model || openaiModel.value() };
     } catch (error) {
       feedback = `The prior plan failed application validation: ${String(error.message || "invalid plan").slice(0, 300)}. Produce a different corrected plan.`;
       if (attempt === 1) {
@@ -583,22 +791,16 @@ export const requestVipFamilyAccess = onCall({ invoker: "public", enforceAppChec
   const requestId = `${owner.uid}_${request.auth.uid}`;
   const requestRef = db.doc(`vipHouseholdRequests/${requestId}`);
   const householdRef = db.doc(`vipHouseholds/${owner.uid}`);
-  const counterRef = db.doc("systemCounters/vipFamilyOffer");
   await db.runTransaction(async (transaction) => {
-    const [existingRequest, householdSnapshot, counterSnapshot] = await Promise.all([
-      transaction.get(requestRef), transaction.get(householdRef), transaction.get(counterRef),
+    const [existingRequest, householdSnapshot] = await Promise.all([
+      transaction.get(requestRef), transaction.get(householdRef),
     ]);
     if (existingRequest.data()?.status === "blocked") throw new HttpsError("permission-denied", "This subscriber has blocked the family access request.");
     const household = householdSnapshot.data() || {};
     const memberUids = Array.isArray(household.memberUids) ? household.memberUids : [];
     if (memberUids.includes(request.auth.uid)) return;
     if (memberUids.length >= VIP_FAMILY_SEAT_LIMIT) throw new HttpsError("resource-exhausted", "This V.I.P. household already has two family members.");
-    if (!household.offerNumber) {
-      const claimed = Number(counterSnapshot.data()?.claimed || 0);
-      if (claimed >= VIP_FAMILY_OFFER_LIMIT) throw new HttpsError("resource-exhausted", "The introductory V.I.P. family offer is fully claimed.");
-      transaction.set(counterRef, { claimed: claimed + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      transaction.set(householdRef, { ownerUid: owner.uid, ownerEmail, offerNumber: claimed + 1, memberUids, createdAt: FieldValue.serverTimestamp() }, { merge: true });
-    }
+    if (!household.ownerUid) transaction.set(householdRef, { ownerUid: owner.uid, ownerEmail, foundingNumber: ownerEntitlement.foundingVipNumber || null, memberUids, createdAt: FieldValue.serverTimestamp() }, { merge: true });
     transaction.set(requestRef, {
       ownerUid: owner.uid, ownerEmail, memberUid: request.auth.uid, memberEmail,
       status: "pending", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
@@ -652,6 +854,38 @@ export const manageVipFamilyAccess = onCall({ invoker: "public", enforceAppCheck
   return { status: action === "approve" ? "approved" : action === "block" ? "blocked" : "removed" };
 });
 
+async function reserveFoundingVip(uid) {
+  const counterRef = db.doc("subscriptionMetrics/vipFounding");
+  const reservationRef = db.doc(`vipFoundingReservations/${uid}`);
+  return db.runTransaction(async (transaction) => {
+    const [counterSnapshot, reservationSnapshot] = await Promise.all([
+      transaction.get(counterRef), transaction.get(reservationRef),
+    ]);
+    const existing = reservationSnapshot.data();
+    const now = Date.now();
+    if (existing?.status === "pending" && Number(existing.expiresAt?.toMillis?.() || 0) > now) return { foundingVip: true, foundingVipNumber: Number(existing.number) };
+    if (existing?.status === "redeemed") return { foundingVip: false, foundingVipNumber: null };
+    const completed = Number(counterSnapshot.data()?.completed || 0);
+    const reserved = Math.max(0, Number(counterSnapshot.data()?.reserved || 0) - (existing?.status === "pending" ? 1 : 0));
+    if (completed + reserved >= VIP_FAMILY_OFFER_LIMIT) return { foundingVip: false, foundingVipNumber: null };
+    const number = completed + reserved + 1;
+    transaction.set(counterRef, { completed, reserved: reserved + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(reservationRef, { uid, number, status: "pending", expiresAt: Timestamp.fromMillis(now + 35 * 60 * 1000), createdAt: existing?.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    return { foundingVip: true, foundingVipNumber: number };
+  });
+}
+
+async function releaseFoundingVipReservation(uid) {
+  const counterRef = db.doc("subscriptionMetrics/vipFounding");
+  const reservationRef = db.doc(`vipFoundingReservations/${uid}`);
+  await db.runTransaction(async (transaction) => {
+    const [counterSnapshot, reservationSnapshot] = await Promise.all([transaction.get(counterRef), transaction.get(reservationRef)]);
+    if (reservationSnapshot.data()?.status !== "pending") return;
+    transaction.set(counterRef, { reserved: Math.max(0, Number(counterSnapshot.data()?.reserved || 0) - 1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(reservationRef, { status: "released", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  });
+}
+
 export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePrices], invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before checkout.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before checkout.");
@@ -659,26 +893,40 @@ export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePric
   let key;
   try { key = priceKey(tierId, billingMode); } catch { throw new HttpsError("invalid-argument", "Invalid subscription selection."); }
   const prices = stripePrices.value();
-  const price = prices[key];
-  if (!price) throw new HttpsError("failed-precondition", "Stripe price is not configured.");
 
   const stripe = new Stripe(stripeSecret.value());
   const entitlement = (await db.doc(`users/${request.auth.uid}/private/entitlement`).get()).data() || {};
   if (entitlement.stripeSubscriptionId && ["active", "trialing", "past_due"].includes(entitlement.status)) {
     throw new HttpsError("already-exists", "You already have a subscription. Use Manage billing to change or cancel it.");
   }
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    line_items: [{ price, quantity: 1 }],
-    ...(entitlement.stripeCustomerId ? { customer: entitlement.stripeCustomerId } : { customer_email: request.auth.token.email }),
-    client_reference_id: request.auth.uid,
-    subscription_data: { metadata: { firebaseUid: request.auth.uid, tierId: String(tierId) } },
-    metadata: { firebaseUid: request.auth.uid, tierId: String(tierId) },
-    success_url: `${appUrl.value()}/premium?checkout=success`,
-    cancel_url: `${appUrl.value()}/premium?checkout=cancelled`,
-    allow_promotion_codes: true,
-  });
-  return { url: session.url };
+  const founding = Number(tierId) === 5 ? await reserveFoundingVip(request.auth.uid) : { foundingVip: false, foundingVipNumber: null };
+  if (founding.foundingVip) key = priceKey(4, billingMode);
+  const price = prices[key];
+  if (!price) throw new HttpsError("failed-precondition", "Stripe price is not configured.");
+  const subscriptionMetadata = {
+    firebaseUid: request.auth.uid,
+    tierId: String(tierId),
+    foundingVip: String(founding.foundingVip),
+    foundingVipNumber: founding.foundingVipNumber ? String(founding.foundingVipNumber) : "",
+  };
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price, quantity: 1 }],
+      ...(entitlement.stripeCustomerId ? { customer: entitlement.stripeCustomerId } : { customer_email: request.auth.token.email }),
+      client_reference_id: request.auth.uid,
+      subscription_data: { metadata: subscriptionMetadata },
+      metadata: subscriptionMetadata,
+      success_url: `${appUrl.value()}/premium?checkout=success`,
+      cancel_url: `${appUrl.value()}/premium?checkout=cancelled`,
+      expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
+      allow_promotion_codes: true,
+    });
+    return { url: session.url };
+  } catch (error) {
+    if (founding.foundingVip) await releaseFoundingVipReservation(request.auth.uid);
+    throw error;
+  }
 });
 
 export const createBillingPortalSession = onCall({ secrets: [stripeSecret], invoker: "public", enforceAppCheck }, async (request) => {
@@ -696,9 +944,54 @@ export const createBillingPortalSession = onCall({ secrets: [stripeSecret], invo
   }
 });
 
+async function recordSubscriptionCounts(uid, subscription, tier) {
+  const metricsRef = db.doc("subscriptionMetrics/tierCounts");
+  const ledgerRef = db.doc(`subscriptionLedger/${subscription.id}`);
+  await db.runTransaction(async (transaction) => {
+    const [metricsSnapshot, ledgerSnapshot] = await Promise.all([transaction.get(metricsRef), transaction.get(ledgerRef)]);
+    const metrics = metricsSnapshot.data() || {};
+    const ledger = ledgerSnapshot.data() || {};
+    const activeByTier = { ...(metrics.activeByTier || {}) };
+    const cumulativeSignupsByTier = { ...(metrics.cumulativeSignupsByTier || {}) };
+    const wasCounted = Boolean(ledger.counted);
+    const previousTier = Number(ledger.tier || 0);
+    const isCounted = ["active", "trialing"].includes(subscription.status) && tier > 0;
+    if (wasCounted && (!isCounted || previousTier !== tier)) activeByTier[String(previousTier)] = Math.max(0, Number(activeByTier[String(previousTier)] || 0) - 1);
+    if (isCounted && (!wasCounted || previousTier !== tier)) activeByTier[String(tier)] = Number(activeByTier[String(tier)] || 0) + 1;
+    const everTiers = Array.isArray(ledger.everTiers) ? ledger.everTiers.map(Number) : [];
+    if (isCounted && !everTiers.includes(tier)) {
+      cumulativeSignupsByTier[String(tier)] = Number(cumulativeSignupsByTier[String(tier)] || 0) + 1;
+      everTiers.push(tier);
+    }
+    transaction.set(metricsRef, { activeByTier, cumulativeSignupsByTier, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(ledgerRef, { uid, tier, status: subscription.status, counted: isCounted, everTiers, customerId: String(subscription.customer), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  });
+}
+
+async function redeemFoundingVipReservation(uid, subscriptionId) {
+  const counterRef = db.doc("subscriptionMetrics/vipFounding");
+  const reservationRef = db.doc(`vipFoundingReservations/${uid}`);
+  await db.runTransaction(async (transaction) => {
+    const [counterSnapshot, reservationSnapshot] = await Promise.all([transaction.get(counterRef), transaction.get(reservationRef)]);
+    if (reservationSnapshot.data()?.status !== "pending") return;
+    const counter = counterSnapshot.data() || {};
+    transaction.set(counterRef, {
+      completed: Number(counter.completed || 0) + 1,
+      reserved: Math.max(0, Number(counter.reserved || 0) - 1),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    transaction.set(reservationRef, { status: "redeemed", subscriptionId, redeemedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  });
+}
+
 async function writeEntitlement(uid, subscription, prices) {
   const priceId = subscription.items?.data?.[0]?.price?.id;
-  const tier = tierFromPrice(priceId, prices);
+  const metadataTier = Number(subscription.metadata?.tierId || 0);
+  const mappedTier = tierFromPrice(priceId, prices);
+  const tier = subscription.metadata?.foundingVip === "true" ? 5 : (mappedTier || ([1, 2, 3, 4, 5].includes(metadataTier) ? metadataTier : 0));
+  const billingMode = billingModeFromPrice(priceId, prices);
+  const foundingVip = tier === 5 && subscription.metadata?.foundingVip === "true";
+  const foundingVipNumber = foundingVip ? Number(subscription.metadata?.foundingVipNumber || 0) || null : null;
   if (!tier) {
     console.error("Stripe subscription price is not mapped to a Nature's Elixirz tier", { priceId, subscriptionId: subscription.id });
   }
@@ -708,14 +1001,21 @@ async function writeEntitlement(uid, subscription, prices) {
     stripeCustomerId: String(subscription.customer),
     stripeSubscriptionId: subscription.id,
     priceId,
+    billingMode,
+    currentPeriodStart: subscription.items?.data?.[0]?.current_period_start || subscription.start_date || null,
     currentPeriodEnd: subscription.items?.data?.[0]?.current_period_end || null,
     cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
     cancelAt: subscription.cancel_at || null,
     canceledAt: subscription.canceled_at || null,
     accessSource: "stripe",
+    householdCircleIncluded: tier === 5,
+    foundingVip,
+    foundingVipNumber,
     updatedAt: FieldValue.serverTimestamp(),
   };
   await db.doc(`users/${uid}/private/entitlement`).set(nextEntitlement, { merge: true });
+  await recordSubscriptionCounts(uid, subscription, tier);
+  if (foundingVip && ["active", "trialing"].includes(subscription.status)) await redeemFoundingVipReservation(uid, subscription.id);
   await updateVipFamilyEntitlements(uid, nextEntitlement);
 }
 
@@ -766,6 +1066,10 @@ export const stripeWebhook = onRequest({ secrets: [stripeSecret, webhookSecret, 
     const session = event.data.object;
     const subscription = await stripe.subscriptions.retrieve(session.subscription);
     await writeEntitlement(session.client_reference_id, subscription, prices);
+  }
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object;
+    if (session.client_reference_id && session.metadata?.foundingVip === "true") await releaseFoundingVipReservation(session.client_reference_id);
   }
   if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.paused", "customer.subscription.resumed"].includes(event.type)) {
     const subscription = event.data.object;

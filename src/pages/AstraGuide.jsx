@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AudioLines, Check, ChevronLeft, ChevronRight, Compass, Crown, GlassWater, LockKeyhole, Pause, PersonStanding, Play, Plus, Send, ShieldCheck, Sparkles, UtensilsCrossed, X } from "lucide-react";
+import { AudioLines, Camera, Check, ChevronLeft, ChevronRight, Compass, Crown, FileText, GlassWater, Image, LockKeyhole, Paperclip, Pause, PersonStanding, Play, Plus, Send, ShieldCheck, Sparkles, Trash2, UtensilsCrossed, X } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import TierPreviewBanner, { useDeveloperAccess, useTierAccess } from "../components/TierPreviewBanner";
 import { useAuth } from "../context/AuthContext";
@@ -10,6 +10,8 @@ import { getWellnessJourney } from "../utilities/wellnessJourney";
 import { getSavedRecipes } from "../utilities/recipeStorage";
 import { addAstraGallerySlide, getAstraGallerySlides, removeAstraGallerySlide } from "../utilities/astraGalleryStorage";
 import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessExchange";
+import { buildAstraKernelContext } from "../utilities/astraKernelContext";
+import { getAstraConversation, saveAstraConversation } from "../utilities/astraConversationStorage";
 import { useLanguage } from "../context/LanguageContext";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
@@ -27,6 +29,25 @@ const welcome = {
   role: "assistant",
   content: "Welcome to your Path of Alignment. I’m Astra Guide. Tell me where you are today—nourishment, relaxation, meals, movement, or continued learning—and we’ll choose one realistic next step together.",
 };
+
+const ATTACHMENT_LIMIT = 3;
+const ATTACHMENT_SIZE_LIMIT = 3 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "text/markdown", "text/csv", "application/json"]);
+
+function readAttachment(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+    reader.onload = () => resolve({
+      id: `${Date.now()}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+      name: file.name.slice(0, 120), type: file.type, size: file.size,
+      kind: file.type.startsWith("image/") ? "image" : "file",
+      ...(file.type.startsWith("text/") || file.type === "application/json" ? { text: String(reader.result).slice(0, 20000) } : { dataUrl: String(reader.result) }),
+    });
+    if (file.type.startsWith("text/") || file.type === "application/json") reader.readAsText(file);
+    else reader.readAsDataURL(file);
+  });
+}
 
 const capabilitySlides = [
   { id: "curated-berry", category: "Smoothie", title: "Cosmic Berry Elixir", description: "A logo-branded preview of the smoothies Nature's Elixirz can formulate.", image: "/assets/astra-gallery/berry-elixir.png" },
@@ -48,12 +69,21 @@ export default function AstraGuide() {
   const { profile } = useSubscriber();
   const { language, languageName } = useLanguage();
   const storageScope = user?.uid || "guest";
-  const [messages, setMessages] = useState([welcome]);
+  const [messages, setMessages] = useState(() => {
+    const recent = getAstraConversation(storageScope);
+    return recent.length ? recent : [welcome];
+  });
   const [draft, setDraft] = useState("");
   const [includeProfile, setIncludeProfile] = useState(false);
+  const [includeKernelContext, setIncludeKernelContext] = useState(true);
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentError, setAttachmentError] = useState("");
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [galleryPlaying, setGalleryPlaying] = useState(true);
   const [personalSlides, setPersonalSlides] = useState(() => getAstraGallerySlides(storageScope));
@@ -72,6 +102,20 @@ export default function AstraGuide() {
   }, [storageScope]);
 
   useEffect(() => {
+    const refreshConversation = (event) => {
+      if (event.detail?.scope !== storageScope) return;
+      const recent = getAstraConversation(storageScope);
+      setMessages(recent.length ? recent : [welcome]);
+    };
+    window.addEventListener("naturesElixirz:data-restored", refreshConversation);
+    return () => window.removeEventListener("naturesElixirz:data-restored", refreshConversation);
+  }, [storageScope]);
+
+  useEffect(() => {
+    saveAstraConversation(messages, storageScope);
+  }, [messages, storageScope]);
+
+  useEffect(() => {
     if (!galleryPlaying || gallerySlides.length < 2) return undefined;
     const timer = window.setInterval(() => setGalleryIndex((index) => (index + 1) % gallerySlides.length), 5500);
     return () => window.clearInterval(timer);
@@ -85,31 +129,56 @@ export default function AstraGuide() {
     setGalleryPlaying(false);
   }
 
+  async function addAttachments(fileList) {
+    setAttachmentError("");
+    const files = Array.from(fileList || []).slice(0, ATTACHMENT_LIMIT - attachments.length);
+    if (!files.length) return;
+    const invalid = files.find((file) => !ALLOWED_ATTACHMENT_TYPES.has(file.type) || file.size > ATTACHMENT_SIZE_LIMIT);
+    if (invalid) {
+      setAttachmentError(`${invalid.name} must be a supported photo or file no larger than 3 MB.`);
+      return;
+    }
+    try {
+      const preparedAttachments = await Promise.all(files.map(readAttachment));
+      setAttachments((current) => [...current, ...preparedAttachments].slice(0, ATTACHMENT_LIMIT));
+      setAttachmentMenuOpen(false);
+    } catch (readError) {
+      setAttachmentError(readError.message);
+    }
+  }
+
   async function send(text = draft) {
     const message = text.trim();
-    if (!message || busy) return;
+    if ((!message && !attachments.length) || busy) return;
     setError("");
     setDraft("");
-    const nextMessages = [...messages, { role: "user", content: message }];
+    const sentAttachments = attachments;
+    const displayMessage = message || "Please review the attached item.";
+    const nextMessages = [...messages, { role: "user", content: displayMessage, attachments: sentAttachments, createdAt: new Date().toISOString() }];
     setMessages(nextMessages);
     if (!canUseLiveAI) {
-      setMessages([...nextMessages, { role: "assistant", content: previewAstraReply(message) }]);
+      setMessages([...nextMessages, { role: "assistant", content: previewAstraReply(displayMessage), createdAt: new Date().toISOString() }]);
+      setAttachments([]);
       return;
     }
     setBusy(true);
     try {
       const reply = await askAstraGuide({
-        message,
+        message: displayMessage,
+        attachments: sentAttachments.map(({ name, type, size, kind, dataUrl, text: attachmentText }) => ({ name, type, size, kind, dataUrl, text: attachmentText })),
         history: messages.slice(-10),
         includeProfile,
         includeSensitive,
+        includeKernelContext,
+        kernelContext: includeKernelContext ? buildAstraKernelContext(storageScope) : undefined,
         profile: includeProfile ? profile : undefined,
         journey: includeProfile ? { ...getWellnessJourney(storageScope), exchange: buildKernelBrief(storageScope, "astra") } : undefined,
         language,
         languageName,
       });
       publishWellnessSignal(storageScope, "astra", { selection: "Personal guidance conversation" });
-      setMessages([...nextMessages, { role: "assistant", content: reply }]);
+      setMessages([...nextMessages, { role: "assistant", content: reply, createdAt: new Date().toISOString() }]);
+      setAttachments([]);
     } catch (requestError) {
       setError(requestError.message || "Astra Guide could not respond. Please try again.");
     } finally {
@@ -149,14 +218,26 @@ export default function AstraGuide() {
       <article className="ne-panel astra-chat">
         <div className="astra-chat-heading"><div><span className="astra-orb" aria-hidden="true" /><div><strong>Astra Guide</strong><small>{status}</small></div></div><span className="astra-status">● Compass online</span></div>
         <div className="astra-messages" aria-live="polite">
-          {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`astra-message ${message.role}`}><span>{message.role === "assistant" ? "ASTRA" : "YOU"}</span><p>{message.content}</p></div>)}
+          {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`astra-message ${message.role}`}><span>{message.role === "assistant" ? "ASTRA" : "YOU"}</span><p>{message.content}</p>{message.attachments?.length > 0 && <div className="astra-message-attachments">{message.attachments.map((attachment) => attachment.kind === "image" ? <img key={attachment.id} src={attachment.dataUrl} alt={`Attached ${attachment.name}`} /> : <span key={attachment.id}><FileText size={15} /> {attachment.name}</span>)}</div>}</div>)}
           {busy && <div className="astra-message assistant"><span>ASTRA</span><p>Mapping your clearest next step…</p></div>}
         </div>
         {error && <div className="ne-alert ne-alert-danger">{error}</div>}
         <div className="astra-composer">
+          <div className="astra-attachment-control">
+            <button type="button" className="astra-attachment-trigger" aria-label="Add a photo or file" aria-expanded={attachmentMenuOpen} onClick={() => setAttachmentMenuOpen((open) => !open)} disabled={busy || attachments.length >= ATTACHMENT_LIMIT}><Paperclip size={20} /></button>
+            {attachmentMenuOpen && <div className="astra-attachment-menu">
+              <button type="button" onClick={() => cameraInputRef.current?.click()}><Camera size={18} /><span>Take a photo<small>Use your phone camera</small></span></button>
+              <button type="button" onClick={() => fileInputRef.current?.click()}><Image size={18} /><span>Upload photo or file<small>Images, PDF, text, CSV, or JSON</small></span></button>
+            </div>}
+            <input ref={cameraInputRef} className="astra-hidden-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => { addAttachments(event.target.files); event.target.value = ""; }} />
+            <input ref={fileInputRef} className="astra-hidden-input" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.csv,.json" onChange={(event) => { addAttachments(event.target.files); event.target.value = ""; }} />
+          </div>
+          {attachments.length > 0 && <div className="astra-attachment-previews">{attachments.map((attachment) => <div key={attachment.id} className="astra-attachment-preview">{attachment.kind === "image" ? <img src={attachment.dataUrl} alt="" /> : <FileText size={18} />}<span title={attachment.name}>{attachment.name}</span><button type="button" aria-label={`Remove ${attachment.name}`} onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}><Trash2 size={14} /></button></div>)}</div>}
           <textarea aria-label="Message Astra" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows="3" maxLength="2000" placeholder="Tell Astra where you are and where you want to go…" />
-          <button className="ne-primary" disabled={!draft.trim() || busy} onClick={() => send()}><Send size={17} /> {busy ? "Mapping…" : canUseLiveAI ? "Ask Astra" : "Preview guidance"}</button>
+          <button className="ne-primary" disabled={(!draft.trim() && !attachments.length) || busy} onClick={() => send()}><Send size={17} /> {busy ? "Mapping…" : canUseLiveAI ? "Ask Astra" : "Preview guidance"}</button>
         </div>
+        {attachmentError && <p className="astra-attachment-error" role="alert">{attachmentError}</p>}
+        <p className="astra-attachment-note">Up to 3 attachments, 3 MB each. Photos and files are sent only with this Astra request and are not added to your profile.</p>
         <p className="astra-fineprint">Astra provides general food and lifestyle education—not medical advice, diagnosis, treatment, emergency care, or a longevity guarantee.</p>
         <section className="astra-gallery" aria-label="Nature's Elixirz capability gallery">
           <img key={currentSlide.id} src={currentSlide.image} alt={`${currentSlide.title} visual concept`} />
@@ -178,7 +259,7 @@ export default function AstraGuide() {
 
       <aside className="astra-sidebar">
         <div className="ne-panel alignment-checkin"><p className="ne-kicker">Daily alignment</p><h2>Where are you today?</h2>{alignmentPath.slice(0, 4).map(({ name, prompt, icon: Icon }) => <button key={name} onClick={() => send(prompt)}><Icon size={17} /><span>{name}</span></button>)}</div>
-        <div className="ne-panel"><h2>Personalization controls</h2><label className="ne-consent"><input type="checkbox" checked={includeProfile} onChange={(event) => { setIncludeProfile(event.target.checked); if (!event.target.checked) setIncludeSensitive(false); }} /> Use my goals, dietary pattern, allergies, and avoid list</label><label className="ne-consent"><input type="checkbox" disabled={!includeProfile} checked={includeSensitive} onChange={(event) => setIncludeSensitive(event.target.checked)} /> Also share age, conditions, medications, tobacco, and alcohol context for this request</label><p className="ne-muted">Sensitive details are only included when you choose them.</p></div>
+        <div className="ne-panel"><h2>Personalization controls</h2><label className="ne-consent"><input type="checkbox" checked={includeKernelContext} onChange={(event) => setIncludeKernelContext(event.target.checked)} /> Use my Kernel data: Smoothie and Meal Plan kitchens, saved recipes, current plans, frequencies, Tai Chi, and movement progress</label><p className="ne-muted">Astra receives a read-only summary and cannot change or delete Kernel data.</p><label className="ne-consent"><input type="checkbox" checked={includeProfile} onChange={(event) => { setIncludeProfile(event.target.checked); if (!event.target.checked) setIncludeSensitive(false); }} /> Use my goals, dietary pattern, allergies, and avoid list</label><label className="ne-consent"><input type="checkbox" disabled={!includeProfile} checked={includeSensitive} onChange={(event) => setIncludeSensitive(event.target.checked)} /> Also share age, conditions, medications, tobacco, and alcohol context for this request</label><p className="ne-muted">Sensitive details are only included when you choose them.</p></div>
         {!user && <div className="ne-panel"><h2>Continue your journey</h2><p className="ne-muted">Create an account, verify your email, and activate a membership for live AI conversations.</p><Link className="ne-secondary inline-block mt-4" to="/account">Open profile</Link></div>}
         <div className="ne-panel astra-safety"><ShieldCheck size={25} /><div><h2>Guidance with boundaries</h2><p>Astra keeps medication and condition decisions with clinicians, pharmacists, and registered dietitians.</p></div></div>
         <div className="ne-panel astra-emergency"><h2>Urgent symptoms?</h2><p>Do not wait for an AI reply. Contact local emergency services for chest pain, trouble breathing, stroke signs, fainting, or a severe allergic reaction.</p></div>

@@ -18,6 +18,9 @@ const goalAccents = {
   blood: ["lentils", "spinach", "beans", "red peppers"],
   nervous: ["banana", "oats", "leafy greens", "beans"],
   metabolic: ["oats", "beans", "leafy greens", "mixed berries"],
+  weightLoss: ["beans", "leafy greens", "mixed berries", "whole grains"],
+  healthyWeight: ["plain yogurt", "oats", "sweet potato", "nut butter"],
+  circulation: ["beets", "leafy greens", "mixed berries", "beans"],
   calm: ["banana", "cucumber", "mixed berries", "roasted vegetables"],
   general: ["seasonal fruit", "three-color vegetables", "leafy greens", "fresh herbs"],
 };
@@ -59,6 +62,10 @@ const smoothieGoalCycles = {
   blood: ["energy", "general", "immune", "focus", "energy", "general"],
   nervous: ["calm", "focus", "general", "digestion", "calm", "energy"],
   metabolic: ["digestion", "protein", "general", "energy", "heart", "digestion"],
+  weightLoss: ["metabolic", "protein", "digestion", "general", "heart", "energy"],
+  healthyWeight: ["protein", "energy", "bones", "general", "protein", "digestion"],
+  circulation: ["heart", "blood", "inflammation", "general", "heart", "energy"],
+  protein: ["protein", "muscles", "bones", "energy", "protein", "general"],
   calm: ["calm", "digestion", "general", "mindfulness", "calm", "focus"],
   general: ["general", "energy", "focus", "digestion", "calm", "heart"],
 };
@@ -97,7 +104,7 @@ export function recommendCulinarySeasoning(profile = {}, goal = "general", food 
   const restrictions = `${profile.allergies || ""} ${profile.avoidIngredients || ""}`.toLowerCase();
   const medicationText = `${profile.medications || ""}`.toLowerCase();
   const cautious = /warfarin|coumadin|anticoagulant|blood thinner/.test(medicationText)
-    || (profile.conditions || []).some((condition) => /pregnan|kidney|liver/i.test(condition));
+    || [...(profile.conditions || []), profile.otherHealthConditions || ""].some((condition) => /pregnan|kidney|liver/i.test(condition));
   const cautiousIngredients = new Set(["garlic", "ginger", "turmeric"]);
   const choices = [...new Set([...mealMatches, ...(seasoningByGoal[goal] || seasoningByGoal.general)])]
     .filter((item) => !restrictions.includes(item) && !(cautious && cautiousIngredients.has(item)))
@@ -363,12 +370,25 @@ export function generateMealPlan(profile = {}, goal = "general", days = 1, optio
       mealPlanMode: true,
     });
     const smoothiePantryMatches = smoothie.pantryMatches || [];
+    const pairedSmoothie = dayIndex === 0 && options.smoothieContext?.recipeName
+      ? {
+          meal: "Smoothie",
+          food: options.smoothieContext.recipeName,
+          pantryMatch: null,
+          ingredients: (options.smoothieContext.ingredients || []).map((ingredient) => ({
+            quantity: typeof ingredient === "string" ? "Saved Tier 1 quantity" : `${ingredient.amount ?? ""} ${ingredient.unit || ""}`.trim() || ingredient.quantity || "Saved Tier 1 quantity",
+            name: typeof ingredient === "string" ? ingredient : ingredient.name,
+          })),
+          instructions: ["Use the exact Tier 1 smoothie formulation already generated for this pairing."],
+          generationSource: "tier-1-handoff",
+        }
+      : null;
     return {
       day: dayIndex + 1,
       reviewedProfile: Boolean(profile.completedAt),
       reviewedKitchenItems: kitchenItems.length,
       meals: [
-        {
+        pairedSmoothie || {
           meal: "Smoothie",
           food: `${smoothie.name} · 16 oz`,
           smoothie,

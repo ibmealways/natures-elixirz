@@ -10,6 +10,16 @@ const profile = {
 };
 
 describe("generatePersonalizedSmoothie", () => {
+  it("maps weight-management nutrition to a fiber-forward supportive formula", () => {
+    const recipe = generatePersonalizedSmoothie(profile, "weightLoss", 16);
+
+    expect(recipe.goal).toBe("weightLoss");
+    expect(recipe.name).toContain("Fiber-Forward Berry Balance");
+    expect(recipe.ingredients.map((item) => item.name).join(" ")).toMatch(/berries/i);
+    expect(recipe.description).toMatch(/balanced eating pattern/i);
+    expect(recipe.description).toMatch(/not a weight-loss treatment/i);
+  });
+
   it("keeps each subscriber on a stable and distinct formulation path", () => {
     const shared = { ...profile, dietaryPattern: "omnivore", healthGoals: ["heart"] };
     const ivan = { ...shared, name: "Ivan Perez", age: "59", weight: "102", height: "60", activity: "Moderate" };
@@ -118,13 +128,21 @@ describe("generatePersonalizedSmoothie", () => {
   });
 
   it("flags ingredient-specific reflux considerations and gentler changes", () => {
-    const recipe = generatePersonalizedSmoothie(profile, "digestion", 16, {
+    const recipe = generatePersonalizedSmoothie({ ...profile, conditions: ["Acid reflux / GERD"] }, "digestion", 16, {
       pantryText: "Blueberries, Strawberries, Grapes, Ground flaxseed, Coconut water, Mint, Hemp protein, Peanut butter, Baby spinach",
       useOnlyPantry: true,
     });
     expect(recipe.assessment.reflux.level).toBe("Higher trigger potential");
     expect(recipe.assessment.reflux.triggers.join(" ")).toContain("Mint");
     expect(recipe.assessment.reflux.adjustments.join(" ")).toContain("Remove mint");
+  });
+
+  it("does not show reflux guidance unless the subscriber saved reflux in the profile", () => {
+    const recipe = generatePersonalizedSmoothie(profile, "digestion", 16, {
+      pantryText: "Blueberries, Strawberries, Coconut water, Mint, Hemp protein",
+      useOnlyPantry: true,
+    });
+    expect(recipe.assessment.reflux).toBeUndefined();
   });
 
   it("builds a sized pantry-only blend from a subscriber fruit list", () => {

@@ -1,4 +1,6 @@
 const ALLOWED_ROLES = new Set(["user", "assistant"]);
+const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "text/markdown", "text/csv", "application/json"]);
+const ATTACHMENT_SIZE_LIMIT = 3 * 1024 * 1024;
 
 export const ASTRA_SYSTEM_INSTRUCTIONS = `
 You are Astra Guide, Nature's Elixirz's conversational food-and-lifestyle wellness guide.
@@ -22,19 +24,43 @@ Safety rules:
   substitutions, and a short safety note. Prefer ordinary food amounts and avoid supplement doses.
 - Ask a brief follow-up when allergies, medicines, conditions, goals, or available ingredients
   materially affect safety. Respect the profile context but do not repeat sensitive details.
+- Treat uploaded photos and files as user-provided context, not proof of a diagnosis. Describe only
+  what is visibly supported, acknowledge uncertainty, never identify a person, and never diagnose
+  an injury or illness from an image. Escalate urgent or concerning symptoms to in-person care.
+- Treat subscriber-approved Kernel context as read-only reference data. Use it when relevant,
+  distinguish the Smoothie pantry from the Meal Plan pantry/fridge/freezer, and never claim you
+  saved, removed, purchased, or changed data unless the application explicitly reports that action.
 `.trim();
+
+function validateAttachments(value) {
+  if (!Array.isArray(value)) return [];
+  if (value.length > 3) throw new Error("A maximum of 3 attachments is allowed.");
+  return value.map((item) => {
+    const name = String(item?.name || "attachment").trim().slice(0, 120);
+    const type = String(item?.type || "").trim();
+    const size = Number(item?.size || 0);
+    if (!ALLOWED_ATTACHMENT_TYPES.has(type) || !Number.isFinite(size) || size < 1 || size > ATTACHMENT_SIZE_LIMIT) throw new Error("Each attachment must be a supported file no larger than 3 MB.");
+    if (type.startsWith("text/") || type === "application/json") {
+      const text = String(item?.text || "").slice(0, 20000);
+      if (!text) throw new Error("The attached text file is empty.");
+      return { name, type, size, kind: "file", text };
+    }
+    const dataUrl = String(item?.dataUrl || "");
+    if (!dataUrl.startsWith(`data:${type};base64,`)) throw new Error("The attachment data is invalid.");
+    return { name, type, size, kind: type.startsWith("image/") ? "image" : "file", dataUrl };
+  });
+}
 
 export function validateConversation(data = {}) {
   const message = typeof data.message === "string" ? data.message.trim() : "";
-  if (!message || message.length > 2000) {
-    throw new Error("Message must contain 1 to 2,000 characters.");
-  }
+  const attachments = validateAttachments(data.attachments);
+  if ((!message && !attachments.length) || message.length > 2000) throw new Error("Provide a message or attachment; messages may contain up to 2,000 characters.");
   const history = Array.isArray(data.history) ? data.history.slice(-10) : [];
   const cleanHistory = history
     .filter((item) => item && ALLOWED_ROLES.has(item.role) && typeof item.content === "string")
     .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 2000) }))
     .filter((item) => item.content);
-  return { message, history: cleanHistory };
+  return { message, history: cleanHistory, attachments };
 }
 
 export function buildProfileContext(profile = {}, includeSensitive = false) {
@@ -47,6 +73,8 @@ export function buildProfileContext(profile = {}, includeSensitive = false) {
   if (includeSensitive) {
     safe.age = String(profile.age || "").slice(0, 20);
     safe.conditions = Array.isArray(profile.conditions) ? profile.conditions.slice(0, 12) : [];
+    safe.otherHealthConditions = String(profile.otherHealthConditions || "").slice(0, 1000);
+    safe.surgicalHistory = String(profile.surgicalHistory || "").slice(0, 1000);
     safe.medications = String(profile.medications || "").slice(0, 1000);
     safe.tobacco = {
       types: Array.isArray(profile.tobacco?.types) ? profile.tobacco.types.slice(0, 8) : [],
@@ -83,6 +111,33 @@ export function buildJourneyContext(journey = {}) {
     kernelSignals: Object.keys(exchangeSignals).length ? exchangeSignals : undefined,
   };
   return Object.fromEntries(Object.entries(context).filter(([, value]) => value !== "" && value !== undefined));
+}
+
+const BLOCKED_KERNEL_KEYS = /password|secret|token|billing|payment|card|email|uid|account|address/i;
+
+function sanitizeKernelValue(value, depth = 0) {
+  if (depth > 7 || value === null || value === undefined) return undefined;
+  if (typeof value === "string") return value.trim().slice(0, 500);
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 80).map((item) => sanitizeKernelValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (typeof value !== "object") return undefined;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !BLOCKED_KERNEL_KEYS.test(key))
+    .slice(0, 40)
+    .map(([key, item]) => [String(key).slice(0, 80), sanitizeKernelValue(item, depth + 1)])
+    .filter(([, item]) => item !== undefined));
+}
+
+export function buildKernelContext(value = {}) {
+  const allowed = ["smoothieKitchen", "mealPlanKitchen", "savedSmoothies", "currentMealPlan", "frequency", "taiChi", "movement", "kernelSignals"];
+  const clean = Object.fromEntries(allowed
+    .filter((key) => value?.[key] !== undefined)
+    .map((key) => [key, sanitizeKernelValue(value[key])])
+    .filter(([, item]) => item !== undefined));
+  const serialized = JSON.stringify(clean);
+  if (serialized.length > 60000) throw new Error("The Kernel context is too large. Reduce saved data and try again.");
+  return clean;
 }
 
 export function hasTierAccess(entitlement = {}, minimumTier = 1, now = Date.now()) {

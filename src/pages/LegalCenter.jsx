@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import GlowNav from "../components/GlowNav";
 import "../styles/legalCenter.css";
 
-const updated = "August 4, 2026";
+const updated = "August 7, 2026";
 const sections = [
   ["privacy", "Privacy"], ["terms", "Terms"], ["subscriptions", "Subscriptions & refunds"],
   ["wellness", "Wellness disclaimer"], ["ai", "AI disclosure"], ["movement", "Camera & movement"],
@@ -12,7 +12,7 @@ const sections = [
 
 const content = {
   privacy: <>
-    <h2>Privacy Notice</h2><p>Nature&apos;s Elixirz is operated by AstraMind Technologies. This notice describes the current web application and is a launch draft pending review by qualified privacy counsel.</p>
+    <h2>Privacy Notice</h2><p>Nature&apos;s Elixirz is operated by AstraMind Technologies. This notice describes the current web application and the information it processes.</p>
     <h3>Information you provide</h3><p>We may process account identifiers; profile details such as name, age, height, weight, preferences and goals; dietary restrictions, allergies, medications and wellness considerations; optional tobacco or alcohol context; pantry and recipe information; subscription records; and movement metrics you choose to create.</p>
     <h3>No location or behavioral surveillance</h3><p>Nature&apos;s Elixirz does not request or access device geolocation, derive location from an IP address, or collect precise location. Subscribers may voluntarily provide a country and broad state, province, or region solely to help us understand community reach. This information is optional, reported only in aggregate, and very small groups are hidden. Enabling location services on a phone or computer does not give Nature&apos;s Elixirz access to them. We do not use advertising pixels or behavioral-tracking profiles.</p>
     <h3>How information is used</h3><p>We use it to authenticate your account, synchronize your information across devices, personalize educational wellness content, provide requested AI features, enforce subscriptions, secure the service, troubleshoot failures, and meet legal obligations. We do not use health-profile information for advertising or sell it.</p>
@@ -29,7 +29,7 @@ const content = {
     <h3>Suspension and liability</h3><p>We may limit or suspend access for security, abuse, nonpayment or legal reasons. To the extent permitted by law, the service is provided without warranties and AstraMind Technologies is not liable for indirect, incidental, special or consequential losses. Rights that cannot legally be waived remain unaffected.</p>
   </>,
   subscriptions: <>
-    <h2>Subscription, Cancellation & Refund Policy</h2><p>Before purchase, the checkout identifies the selected tier, billing interval, price and renewal terms. Web subscriptions are processed by Stripe and renew automatically until canceled.</p>
+    <h2>Subscription, Cancellation & Refund Policy</h2><p>Before purchase, the checkout identifies the selected tier, billing interval, price and renewal terms. Web subscriptions are processed by Stripe and renew automatically until canceled.</p><h3>Planning windows and generation limits</h3><p>Monthly memberships provide a planning window of up to 30 days beginning with the first day of the current paid subscription period. Annual memberships may create monthly smoothie and meal-planning selections for subscription months 1 through 12, with each individual plan limited to 30 days. Smoothie generation is limited to three newly generated formulas per calendar day for both monthly and annual memberships. Saved formulas remain available and unused daily generations do not roll over.</p>
     <h3>Cancellation</h3><p>Use <Link to="/premium">Plans</Link> and choose the billing-management option. Unless checkout or applicable law says otherwise, cancellation stops future renewal and access continues through the paid billing period. Deleting an account initiates cancellation of a linked web subscription before account deletion proceeds.</p>
     <h3>Tier changes and recovery</h3><p>Billing-provider rules determine proration and effective dates for plan changes. If paid access is missing, use Restore membership access on the Plans page while signed into the purchasing account.</p>
     <h3>Refunds</h3><p>Payments are generally nonrefundable after a billing period begins except where required by law or expressly stated at purchase. Duplicate or erroneous charges should be reported promptly through Support. Native-app purchases, when offered, will follow the applicable Apple or Google billing and refund process.</p>
@@ -53,8 +53,9 @@ const content = {
     <p>If the in-app process fails, use the Support instructions below and identify the account email. Never send passwords, medication lists or other sensitive profile values in a support message.</p>
   </>,
   support: <>
-    <h2>Contact & Support</h2><p>For account, billing, privacy, accessibility, safety or deletion help, use the authenticated controls in the <Link to="/account">Profile Kernel</Link>. A dedicated business-controlled support email and mailing contact must be published here before public paid launch.</p>
-    <p><strong>Launch hold:</strong> Nature&apos;s Elixirz should remain in controlled beta until verified support contact information and legally reviewed policies are published.</p>
+    <h2>Contact & Support</h2><p>For account, billing, privacy, accessibility, safety or deletion help, open the <Link to="/support">Subscriber Support Center</Link> or email <a href="mailto:support@natureselixirz.com">support@natureselixirz.com</a>.</p>
+    <p>Never include a password, payment-card number, medication list, or other sensitive profile information in an email. For billing help, include only the account email and a brief description of the issue.</p>
+    <p><strong>Response channel:</strong> Support replies are sent only from a business-controlled Nature&apos;s Elixirz address. Policy and account requests should be retained for operational follow-up.</p>
   </>,
 };
 

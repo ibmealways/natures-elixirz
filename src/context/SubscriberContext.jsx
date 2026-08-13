@@ -18,6 +18,7 @@ import { getMRVIProfile, restoreMRVIProfile } from "../utilities/mrviStorage";
 import { getKitchenInventory, restoreKitchenInventory } from "../utilities/kitchenInventory";
 import { getMealKitchenInventory, restoreMealKitchenInventory } from "../utilities/mealKitchenInventory";
 import { getWellnessExchange, restoreWellnessExchange } from "../utilities/wellnessExchange";
+import { getAstraConversationBundle, restoreAstraConversation } from "../utilities/astraConversationStorage";
 
 const SubscriberContext = createContext(null);
 const announceDataReady = () => {
@@ -53,6 +54,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       kitchen: getKitchenInventory(scope),
       mealKitchen: getMealKitchenInventory(scope),
       exchange: getWellnessExchange(scope),
+      astraConversation: getAstraConversationBundle(scope),
     });
     const hasLocalData = (bundle) => Boolean(
       hasCloudProfileRecord(bundle.profile)
@@ -64,10 +66,11 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       || [...bundle.kitchen.pantry, ...bundle.kitchen.fridge, ...bundle.kitchen.freezer].length
       || [...bundle.mealKitchen.pantry, ...bundle.mealKitchen.fridge, ...bundle.mealKitchen.freezer].length
       || bundle.exchange?.events?.length
+      || bundle.astraConversation?.messages?.length
     );
     const snapshot = () => {
       const local = localBundle(storageScope);
-      return uploadWellnessData(user, local.profile, local.recipes, local.journey, local.movement, local.kitchen, local.mealKitchen, local.exchange);
+      return uploadWellnessData(user, local.profile, local.recipes, local.journey, local.movement, local.kitchen, local.mealKitchen, local.exchange, local.astraConversation);
     };
 
     const applyCloud = (cloud) => {
@@ -79,6 +82,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       if (cloud.kitchen) restoreKitchenInventory(cloud.kitchen, storageScope);
       if (cloud.mealKitchen) restoreMealKitchenInventory(cloud.mealKitchen, storageScope);
       if (cloud.exchange) restoreWellnessExchange(cloud.exchange, storageScope);
+      if (cloud.astraConversation) restoreAstraConversation(cloud.astraConversation, storageScope);
       restoreSavedRecipes(cloud.recipes, storageScope);
       notifyCloudRestore(storageScope);
       queueMicrotask(() => { applyingRemote = false; });
@@ -96,9 +100,14 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
           kitchen: cloud.kitchen || { pantry: [], fridge: [], freezer: [] },
           mealKitchen: cloud.mealKitchen || { pantry: [], fridge: [], freezer: [] },
           exchange: cloud.exchange || { signals: {}, events: [], memories: {} },
+          astraConversation: cloud.astraConversation || { messages: [] },
         });
         if (hasCloud) {
           applyCloud(cloud);
+          // A previously cleared account can later be explicitly recovered. Once
+          // meaningful profile data exists, remove the obsolete clearing marker
+          // from the canonical cloud copy so new devices see one unambiguous state.
+          if (hasMeaningfulProfile(cloud.profile) && cloud.profile?.clearedAt) await snapshot();
           if (!hasMeaningfulProfile(cloud.profile)) {
             const accountProfile = getSubscriberProfile(storageScope);
             const guestProfile = getSubscriberProfile("guest");
@@ -123,6 +132,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
             restoreKitchenInventory(guestLocal.kitchen, storageScope);
             restoreMealKitchenInventory(guestLocal.mealKitchen, storageScope);
             restoreWellnessExchange(guestLocal.exchange, storageScope);
+            restoreAstraConversation(guestLocal.astraConversation, storageScope);
             restoreSavedRecipes(guestLocal.recipes, storageScope);
             notifyCloudRestore(storageScope);
           }

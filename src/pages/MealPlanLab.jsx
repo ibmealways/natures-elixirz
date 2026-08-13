@@ -55,6 +55,22 @@ const mealCollageImages = [
 
 export default function MealPlanLab() {
   const [params] = useSearchParams();
+  const handoffSource = params.get("source") || "";
+  const readStoredContext = (key) => {
+    for (const storage of [sessionStorage, localStorage]) {
+      try {
+        const value = storage.getItem(key);
+        if (value) return JSON.parse(value);
+      } catch {
+        // Ignore malformed or unavailable browser storage.
+      }
+    }
+    return null;
+  };
+  const smoothieContext = readStoredContext("naturesElixirz.latestSmoothieContext");
+  const frequencyContext = handoffSource === "frequency"
+    ? readStoredContext("naturesElixirz.latestFrequencyContext")
+    : null;
   const { user } = useAuth();
   const { profile, isOnboarded } = useSubscriber();
   const storageScope = user?.uid || "guest";
@@ -78,6 +94,8 @@ export default function MealPlanLab() {
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
   const [goal, setGoal] = useState(VALID_GOALS.includes(requestedGoal) ? requestedGoal : rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
   const [days, setDays] = useState(1);
+  const [planningMonth, setPlanningMonth] = useState(1);
+  const yearlyPlanning = profile.subscriptionBillingMode === "yearly";
   const [generated, setGenerated] = useState(null);
   const [saved, setSaved] = useState(false);
   const [collageDay, setCollageDay] = useState(0);
@@ -90,13 +108,16 @@ export default function MealPlanLab() {
   const [stockedMessage, setStockedMessage] = useState("");
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
-  const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems }), [profile, goal, days, generationContext.kitchenItems]);
+  const autoHandoffStartedRef = useRef(false);
+  const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
   const plan = generated || sample;
   const groceries = buildGroceryList(plan, generationContext.kitchenItems);
   const selectedGoal = goals.find(([value]) => value === goal) || goals.find(([value]) => value === "general");
   const journey = getWellnessJourney(storageScope);
   const calendar = useMemo(() => {
-    const today = new Date();
+    const subscriptionStart = profile.subscriptionCurrentPeriodStart ? new Date(Number(profile.subscriptionCurrentPeriodStart) * 1000) : new Date();
+    const today = new Date(subscriptionStart);
+    today.setMonth(today.getMonth() + planningMonth - 1);
     const year = today.getFullYear();
     const month = today.getMonth();
     const first = new Date(year, month, 1);
@@ -109,7 +130,7 @@ export default function MealPlanLab() {
     }
     while (cells.length % 7) cells.push(null);
     return { label: today.toLocaleDateString(undefined, { month: "long", year: "numeric" }), cells };
-  }, [plan]);
+  }, [plan, planningMonth, profile.subscriptionCurrentPeriodStart]);
 
   function addInventoryItem(zone) {
     const value = inventoryDrafts[zone].trim();
@@ -181,8 +202,24 @@ export default function MealPlanLab() {
       const result = await callable({
         goal: requestedNutritionGoal,
         goalLabel: goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal,
+        crossTierContext: {
+          smoothie: smoothieContext ? {
+            goal: smoothieContext.goal,
+            selectedGoals: smoothieContext.selectedGoals,
+            recipeName: smoothieContext.recipeName,
+            ingredients: smoothieContext.ingredients,
+            nutrition: smoothieContext.nutrition,
+          } : null,
+          frequency: frequencyContext ? {
+            hz: frequencyContext.hz,
+            title: frequencyContext.title,
+            goal: frequencyContext.goal,
+          } : null,
+          frequencyIncludedBySubscriber: handoffSource === "frequency",
+        },
         days: requestedDays,
         variationSeed,
+        planningMonth,
         kitchenItems: generationContext.kitchenItems,
       });
       if (requestEpoch !== planEpochRef.current) return;
@@ -193,7 +230,7 @@ export default function MealPlanLab() {
     } catch (error) {
       if (requestEpoch !== planEpochRef.current) return;
       console.error("AI meal-plan generation failed", error);
-      nextPlan = generateMealPlan(profile, requestedNutritionGoal, requestedDays, { kitchenItems: generationContext.kitchenItems, variationSeed });
+      nextPlan = generateMealPlan(profile, requestedNutritionGoal, requestedDays, { kitchenItems: generationContext.kitchenItems, variationSeed, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null });
       setMedicationSafety(profile.medications ? { reviewRequired: true, status: "Pharmacist review advised", note: "The AI medication screen was unavailable. Confirm this backup plan with a pharmacist before relying on it alongside medication.", foodsAvoided: [] } : null);
       setGenerationStatus("fallback");
       setGenerationMessage(requestedDays > 7
@@ -207,6 +244,12 @@ export default function MealPlanLab() {
     generateVisuals(nextPlan[0], 0);
     window.setTimeout(() => document.querySelector("#meal-constellation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
+
+  useEffect(() => {
+    if (handoffSource !== "smoothie" || !smoothieContext?.recipeName || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;
+    autoHandoffStartedRef.current = true;
+    generate(0, goal, days);
+  }, [handoffSource, smoothieContext?.recipeName, unlocked, isOnboarded]);
 
   function generateAlternate() {
     const nextIndex = alternateIndex + 1;
@@ -230,7 +273,7 @@ export default function MealPlanLab() {
     <section className="grove-planner" id="grove-planner">
       <div className="planner-heading"><div><p className="ne-kicker">Cultivation console</p><h2>Shape your nourishment rhythm</h2></div><span><i /> Grove intelligence online</span></div>
       <div className="goal-garden">{goals.map(([value, label, sublabel, Icon]) => <button key={value} className={goal === value ? "active" : ""} onClick={() => { const hadGeneratedPlan = Boolean(generated); setGoal(value); resetPlanVisuals(); if (hadGeneratedPlan) generate(0, value, days); else setGenerated(null); }}><i><Icon size={20} /></i><span><strong>{label}</strong><small>{sublabel}</small></span>{goal === value && <Sparkles className="selected-spark" size={14} />}</button>)}</div>
-      <div className="plan-horizon"><div><span className="ne-label">Choose your horizon</span><p>Build a plan for today, a short reset, a full week, or a full month.</p><label className="measurement-selector"><span>Measurement system</span><select value={measurementSystem} onChange={(event) => setMeasurementSystem(saveMeasurementSystem(event.target.value))}><option value="standard">English standard</option><option value="metric">Metric</option></select></label></div><div>{[1, 3, 7, 30].map((value) => <button className={days === value ? "active" : ""} key={value} onClick={() => { const hadGeneratedPlan = Boolean(generated); setDays(value); resetPlanVisuals(); if (hadGeneratedPlan) generate(0, goal, value); else setGenerated(null); }}><CalendarDays size={18} /><strong>{value}</strong><span>day{value > 1 ? "s" : ""}</span></button>)}</div></div>
+      <div className="plan-horizon"><div><span className="ne-label">Choose your horizon</span><p>{yearlyPlanning ? "Choose any subscription month, up to 12, and build as many 30-day plans as you wish during the active annual term." : "Your planning window begins on the first day of the current monthly subscription period and is limited to 30 days."}</p><label className="measurement-selector"><span>Measurement system</span><select value={measurementSystem} onChange={(event) => setMeasurementSystem(saveMeasurementSystem(event.target.value))}><option value="standard">English standard</option><option value="metric">Metric</option></select></label>{yearlyPlanning && <label className="measurement-selector"><span>Annual planning month</span><select value={planningMonth} onChange={(event) => { setPlanningMonth(Number(event.target.value)); setGenerated(null); resetPlanVisuals(); }}>{Array.from({ length: 12 }, (_, index) => <option value={index + 1} key={index + 1}>Subscription month {index + 1}</option>)}</select></label>}</div><div>{[1, 3, 7, 30].map((value) => <button className={days === value ? "active" : ""} key={value} onClick={() => { const hadGeneratedPlan = Boolean(generated); setDays(value); resetPlanVisuals(); if (hadGeneratedPlan) generate(0, goal, value); else setGenerated(null); }}><CalendarDays size={18} /><strong>{value}</strong><span>day{value > 1 ? "s" : ""}</span></button>)}</div></div>
       <section className="meal-kitchen-vault">
         <div className="meal-kitchen-heading"><div><p className="ne-kicker">Meal-plan kitchen</p><h2>What can Astra cook with?</h2><p>Your smoothie pantry is imported here automatically. Items added below stay in Meal Plans and never flow back into Smoothies.</p></div><span>{mealKitchenItems.length} total ingredients</span></div>
         <div className="meal-kitchen-zones">{[
@@ -241,7 +284,7 @@ export default function MealPlanLab() {
         <p className="smoothie-import-note"><GlassWater size={15} /> Smoothie pantry imported: {[...smoothieInventory.pantry, ...smoothieInventory.fridge, ...smoothieInventory.freezer].length || 0} ingredients.</p>
       </section>
       <div className="ne-alert"><strong>Pre-generation inventory review:</strong> {isOnboarded ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total items from Pantry, Fridge, Freezer, and Smoothie pantry will be reviewed.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
-      <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded} onClick={() => generate(0)}>{!unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button></div>
+      <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded} onClick={() => generate(0)}>{!unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
       {generationMessage && <div className={`ne-alert ${generationStatus === "fallback" ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : "Rules-based backup"}:</strong> {generationMessage}</div>}
       {medicationSafety && <div className={`ne-alert ${medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {medicationSafety.status}:</strong> {medicationSafety.note}{medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {medicationSafety.foodsAvoided.join(", ")}.</>} This screening cannot replace the medication label, pharmacist, or prescriber.</div>}
     </section>

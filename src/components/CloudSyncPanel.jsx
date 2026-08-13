@@ -11,6 +11,8 @@ import { getMealKitchenInventory, restoreMealKitchenInventory } from "../utiliti
 import { getWellnessExchange, restoreWellnessExchange } from "../utilities/wellnessExchange";
 import { EMPTY_PROFILE, listRecoverableLocalProfiles } from "../utilities/profileStorage";
 import { hasMeaningfulProfile } from "../utilities/cloudSync";
+import { getAstraConversationBundle, restoreAstraConversation } from "../utilities/astraConversationStorage";
+import { acknowledgeHouseholdKitchenImport, getAcknowledgedHouseholdKitchenImports } from "../utilities/householdKitchenImports";
 
 const mergeItems = (left = [], right = []) => [...new Map([...left, ...right].map((item) => [String(item).trim().toLowerCase(), String(item).trim()])).values()].filter(Boolean);
 const mergeInventory = (current, shared) => ({
@@ -30,6 +32,10 @@ export default function CloudSyncPanel() {
   const [removalToReview, setRemovalToReview] = useState(null);
   const [kitchenToReview, setKitchenToReview] = useState(null);
   const localCandidates = useMemo(() => listRecoverableLocalProfiles(user?.uid), [user?.uid, recoveryRevision]);
+  const acknowledgedKitchenImports = useMemo(
+    () => new Set(getAcknowledgedHouseholdKitchenImports(user?.uid)),
+    [user?.uid, recoveryRevision],
+  );
   const recoveryCandidates = hasMeaningfulProfile(profile) ? [] : localCandidates;
   const matchingSource = hasMeaningfulProfile(profile)
     ? localCandidates.find((candidate) => candidate.sourceScope !== "guest" && !candidate.legacy
@@ -40,6 +46,7 @@ export default function CloudSyncPanel() {
     const mealKitchen = getMealKitchenInventory(candidate.sourceScope);
     return { ...candidate, smoothieKitchen, mealKitchen, kitchenItemCount: inventoryCount(smoothieKitchen), mealItemCount: inventoryCount(mealKitchen) };
   }).filter((candidate) => candidate.displayName.toLowerCase() !== String(profile.name || "").trim().toLowerCase()
+    && !acknowledgedKitchenImports.has(candidate.sourceScope)
     && candidate.kitchenItemCount + candidate.mealItemCount > 0) : [];
 
   const recoverLocalProfile = async (candidate) => {
@@ -59,7 +66,7 @@ export default function CloudSyncPanel() {
       restoreKitchenInventory(kitchen, user.uid);
       restoreMealKitchenInventory(mealKitchen, user.uid);
       restoreWellnessExchange(exchange, user.uid);
-      await uploadWellnessData(user, recoveredProfile, recipes, journey, movement, kitchen, mealKitchen, exchange);
+      await uploadWellnessData(user, recoveredProfile, recipes, journey, movement, kitchen, mealKitchen, exchange, getAstraConversationBundle(sourceScope));
       notifyCloudRestore(user.uid);
       setRecoveryRevision((value) => value + 1);
       setMessage(`${candidate.displayName}'s workstation profile and Kernel data were recovered to ${user.email} and synchronized. The original local copy remains as a backup.`);
@@ -82,7 +89,7 @@ export default function CloudSyncPanel() {
       const kitchen = restoreKitchenInventory({}, user.uid);
       const mealKitchen = restoreMealKitchenInventory({}, user.uid);
       const exchange = restoreWellnessExchange({}, user.uid);
-      await uploadWellnessData(user, clearedProfile, [], journey, movement, kitchen, mealKitchen, exchange);
+      await uploadWellnessData(user, clearedProfile, [], journey, movement, kitchen, mealKitchen, exchange, { messages: [] });
       notifyCloudRestore(user.uid);
       setRemovalToReview(null);
       setRecoveryRevision((value) => value + 1);
@@ -99,9 +106,11 @@ export default function CloudSyncPanel() {
     try {
       const kitchen = restoreKitchenInventory(mergeInventory(getKitchenInventory(user.uid), candidate.smoothieKitchen), user.uid);
       const mealKitchen = restoreMealKitchenInventory(mergeInventory(getMealKitchenInventory(user.uid), candidate.mealKitchen), user.uid);
-      await uploadWellnessData(user, profile, getSavedRecipes(user.uid), getWellnessJourney(user.uid), getMRVIProfile(user.uid), kitchen, mealKitchen, getWellnessExchange(user.uid));
+      await uploadWellnessData(user, profile, getSavedRecipes(user.uid), getWellnessJourney(user.uid), getMRVIProfile(user.uid), kitchen, mealKitchen, getWellnessExchange(user.uid), getAstraConversationBundle(user.uid));
+      acknowledgeHouseholdKitchenImport(user.uid, candidate.sourceScope);
       notifyCloudRestore(user.uid);
       setKitchenToReview(null);
+      setRecoveryRevision((value) => value + 1);
       setMessage(`Shared household kitchen imported from ${candidate.displayName}: ${inventoryCount(kitchen)} Smoothie Kitchen items and ${inventoryCount(mealKitchen)} Meal Plan Kitchen items are now synchronized to ${user.email}. No personal profile data were copied.`);
     } catch {
       setMessage("The household pantry import was unsuccessful. No personal profile information was copied; please try again.");
@@ -114,8 +123,8 @@ export default function CloudSyncPanel() {
     setBusy(true); setMessage("");
     try {
       if (mode === "upload") {
-        await uploadWellnessData(user, profile, getSavedRecipes(user.uid), getWellnessJourney(user.uid), getMRVIProfile(user.uid), getKitchenInventory(user.uid), getMealKitchenInventory(user.uid), getWellnessExchange(user.uid));
-        setMessage("Profile, recipes, journey selections, and numeric movement history were synchronized to your private account path.");
+        await uploadWellnessData(user, profile, getSavedRecipes(user.uid), getWellnessJourney(user.uid), getMRVIProfile(user.uid), getKitchenInventory(user.uid), getMealKitchenInventory(user.uid), getWellnessExchange(user.uid), getAstraConversationBundle(user.uid));
+        setMessage("Profile, pantries, recipes, recent Astra conversation, journey selections, and numeric movement history were synchronized to your private account path.");
       } else {
         const cloud = await downloadWellnessData(user);
         if (cloud.profile) saveProfile(cloud.profile);
@@ -124,9 +133,10 @@ export default function CloudSyncPanel() {
         if (cloud.kitchen) restoreKitchenInventory(cloud.kitchen, user.uid);
         if (cloud.mealKitchen) restoreMealKitchenInventory(cloud.mealKitchen, user.uid);
         if (cloud.exchange) restoreWellnessExchange(cloud.exchange, user.uid);
+        if (cloud.astraConversation) restoreAstraConversation(cloud.astraConversation, user.uid);
         restoreSavedRecipes(cloud.recipes, user.uid);
         notifyCloudRestore(user.uid);
-        setMessage("Cloud profile, pantries, recipes, journey, and movement data restored to this device.");
+        setMessage("Cloud profile, pantries, recipes, recent Astra conversation, journey, and movement data restored to this device.");
       }
     } catch {
       setMessage("Synchronization was unsuccessful. Confirm Firebase setup and try again.");

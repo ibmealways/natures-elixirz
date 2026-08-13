@@ -27,7 +27,7 @@ export default function AccountControls() {
     setBusy("resend"); setMessage("");
     try {
       await requestBrandedVerificationEmail();
-      setMessage(`Nature's Elixirz verification email queued for ${user.email}. Check Inbox, Junk, and iCloud Mail rules.`);
+      setMessage(`Nature's Elixirz verification email queued for ${user.email}. Check Inbox, Junk, and provider filtering rules.`);
     } catch (error) {
       const messages = {
         "functions/resource-exhausted": "Please wait one minute before requesting another verification email.",

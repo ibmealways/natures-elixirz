@@ -16,7 +16,7 @@ export const tiers = [
     features: ["Everything in Tier 3", "Tai Chi studio", "Balance, flexibility, and mindfulness flows", "Movement wellness trend tracking"],
   },
   {
-    id: 5, name: "V.I.P. Longevity Circle", tagline: "Intelligence + Member Gifts", monthly: 99, yearly: 1080, vip: true,
-    features: ["Everything in Tier 4", "Biweekly evidence-aware briefings", "AI and medical advancement watch", "Longevity and holistic wellness education", "Monthly member gift or merchandise"],
+    id: 5, name: "V.I.P. Longevity Circle", tagline: "Intelligence + Member Gifts", monthly: 99.99, yearly: 1080, foundingMonthly: 59.99, foundingYearly: 650, vip: true,
+    features: ["Everything in Tier 4", "V.I.P. Household Circle with two family seats", "Biweekly evidence-aware briefings", "AI and medical advancement watch", "Longevity and holistic wellness education", "Monthly member gift or merchandise"],
   },
 ];

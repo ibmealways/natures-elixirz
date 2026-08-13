@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Activity, Check, Cigarette, Cloud, Eye, EyeOff, Fingerprint, Footprints, HeartPulse,
-  Globe2, Leaf, LockKeyhole, MapPin, ScanFace, ShieldCheck, Sparkles, UserRound, Wine
+  Activity, Bone, Brain, Check, Cigarette, Cloud, Droplets, Dumbbell, Eye, EyeOff,
+  Fingerprint, Footprints, HeartPulse, Globe2, Leaf, LockKeyhole, MapPin, ScanFace,
+  ShieldCheck, Sparkles, TrendingDown, TrendingUp, UserRound, Wind, Wine
 } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import { useSubscriber } from "../context/SubscriberContext";
@@ -14,6 +15,7 @@ import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/profileVault.css";
 import "../styles/profileReach.css";
+import "../styles/profileHealthConditions.css";
 
 const goals = [
   ["heart", "Heart-supportive eating", HeartPulse],
@@ -21,8 +23,19 @@ const goals = [
   ["energy", "Steady energy", Activity],
   ["inflammation", "Produce-rich recovery", Sparkles],
   ["general", "Everyday nutrition", ShieldCheck],
+  ["weightLoss", "Healthy weight loss support", TrendingDown],
+  ["healthyWeight", "Healthy weight gain support", TrendingUp],
+  ["circulation", "Aorta & vascular-supportive nutrition", HeartPulse],
+  ["lungs", "Lung-supportive nutrition", Wind],
+  ["joints", "Joint-supportive nutrition", Activity],
+  ["blood", "Blood-building nutrition", Droplets],
+  ["bones", "Bone-supportive nutrition", Bone],
+  ["protein", "Muscle & strength nourishment", Dumbbell],
+  ["focus", "Brain & cognition support", Brain],
+  ["immune", "Immune nourishment", ShieldCheck],
+  ["skin", "Skin-supportive nutrition", Sparkles],
 ];
-const conditions = ["Heart disease", "High blood pressure", "Diabetes", "Kidney disease", "Pregnancy", "Food intolerance"];
+const conditions = ["Heart disease", "High blood pressure", "Diabetes", "Kidney disease", "Pregnancy", "Food intolerance", "Acid reflux / GERD"];
 const tobaccoTypes = ["Cigarettes", "Cigars", "Chewing tobacco", "Pipe tobacco", "Nicotine vape"];
 const alcoholTypes = ["Beer", "Wine", "Vodka", "Rum", "Whiskey", "Other spirits"];
 const consumptionFrequencies = [["none", "None currently"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["occasionally", "Occasionally"]];
@@ -42,6 +55,7 @@ function profileContent(value = {}) {
 export default function AccountPage() {
   const { profile, saveProfile, resetProfile } = useSubscriber();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState(profile);
   const [accepted, setAccepted] = useState(false);
   const [showLifestyle, setShowLifestyle] = useState(false);
@@ -56,6 +70,14 @@ export default function AccountPage() {
   useEffect(() => {
     if (profileChanged) setAccepted(false);
   }, [profileChanged]);
+
+  useEffect(() => {
+    if (location.hash !== "#account-access") return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("account-access")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash]);
 
   useEffect(() => {
     if (!showLifestyle) return undefined;
@@ -150,6 +172,8 @@ export default function AccountPage() {
           return <label className={checked ? "selected" : ""} key={condition}><input type="checkbox" checked={checked} onChange={() => toggle("conditions", condition)} /><span><Check size={12} /></span>{condition}</label>;
         })}</div>
         <div className="vault-textareas">
+          <label className="health-conditions-field"><span>Other diagnosed health conditions <small>optional</small></span><textarea rows="3" maxLength="1000" value={form.otherHealthConditions || ""} onChange={(event) => setForm({ ...form, otherHealthConditions: event.target.value })} placeholder="List ongoing illnesses or diagnosed conditions not shown above" /><small>Include only information you want Nature&apos;s Elixirz to consider for food, movement, and safety guidance. This does not provide a diagnosis.</small></label>
+          <label className="health-conditions-field"><span>Surgical history <small>optional</small></span><textarea rows="3" maxLength="1000" value={form.surgicalHistory || ""} onChange={(event) => setForm({ ...form, surgicalHistory: event.target.value })} placeholder="List relevant surgeries and approximate dates, if known" /><small>Share only surgeries you want considered for food, movement, and safety guidance. Nature&apos;s Elixirz does not provide postoperative clearance.</small></label>
           <label><span>Current medications</span><textarea rows="4" value={form.medications} onChange={(event) => setForm({ ...form, medications: event.target.value })} placeholder="Prescription and over-the-counter medicines" /></label>
           <label><span>Allergies or intolerances</span><textarea rows="4" value={form.allergies} onChange={(event) => setForm({ ...form, allergies: event.target.value })} placeholder="Foods or ingredients that cause a reaction" /></label>
           <label><span>Ingredients you avoid</span><textarea rows="4" value={form.avoidIngredients} onChange={(event) => setForm({ ...form, avoidIngredients: event.target.value })} placeholder="Personal, cultural, or dietary exclusions" /></label>
@@ -181,7 +205,7 @@ export default function AccountPage() {
       <div className="profile-actions"><button className="save-identity" type="submit"><ShieldCheck size={18} /> Seal profile &amp; open plans</button>{profile.completedAt && <button type="button" onClick={resetProfile}>Clear local profile</button>}</div>
     </form>
 
-    <section className="cloud-vault">
+    <section className="cloud-vault" id="account-access">
       <div className="cloud-vault-heading"><i><Cloud size={24} /></i><div><p className="ne-kicker">Optional cloud identity</p><h2>Carry your constellation between devices.</h2><p>Account authentication uses email and password. No biometric information is collected.</p></div></div>
       <div className="cloud-vault-console"><AuthForm /><CloudSyncPanel /><AccountControls /><VipFamilyAccess /></div>
     </section>

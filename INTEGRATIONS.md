@@ -93,6 +93,20 @@ npx firebase-tools deploy --only hosting
 
 Before enabling live mode, test account creation, email verification policy, profile sync consent, payment success and cancellation, webhook retries, tier upgrades/downgrades, subscription expiry, account deletion, refunds, and customer-support recovery.
 
+## App Check rollout
+
+The web client initializes Firebase App Check with the registered reCAPTCHA
+Enterprise site key and automatic token refresh. Production callable enforcement
+is controlled by `ENFORCE_APP_CHECK` in
+`functions/.env.natures-elixirz-os`.
+
+Keep enforcement disabled while validating token acceptance on Edge, Chrome, and
+iPhone Safari. An August 7, 2026 authenticated smoke test showed that enabling
+enforcement rejected a legitimate signed-in Edge request, so enforcement was
+rolled back while token collection remains active. Do not set the flag to `true`
+until legitimate requests succeed on every supported device and the App Check
+metrics show valid tokens.
+
 ## Developer tier access
 
 Running `npm run dev` unlocks all five tiers plus Movement/G.A.I.T. for local
@@ -100,7 +114,7 @@ developer testing. This uses Vite's compile-time development flag and is exclude
 from production builds. Production access continues to require a trusted
 Firestore entitlement written by the Stripe webhook.
 
-Frequency provides a YouTube search link scoped to the selected Hz. Tai Chi
-provides a YouTube search link scoped to the selected pathway. Both open YouTube
-in a new tab; Nature's Elixirz does not represent third-party videos as medical
-treatment or as owned content.
+Frequency and Tai Chi provide in-application YouTube players scoped to the
+selected frequency or pathway. YouTube may still display its own controls and
+privacy notices. Nature's Elixirz does not represent third-party videos as
+medical treatment or as owned content.

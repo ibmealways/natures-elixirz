@@ -12,6 +12,8 @@ export function buildGenerationContext(profile = {}, inventory = {}, kernelBrief
     profile.height && "height",
     profile.healthGoals?.length && "goals",
     profile.conditions?.length && "health considerations",
+    profile.otherHealthConditions && "other health conditions",
+    profile.surgicalHistory && "surgical history",
     profile.medications && "medications",
     profile.allergies && "allergies",
     profile.dietaryPattern && "dietary pattern",

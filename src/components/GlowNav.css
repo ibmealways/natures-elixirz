@@ -51,7 +51,7 @@
   text-overflow: ellipsis;
 }
 .account-utility button { cursor: pointer; color: #fef3c7; }
-.account-utility a:hover, .account-utility button:hover { border-color: rgba(94,234,212,.65); box-shadow: 0 0 18px rgba(45,212,191,.16); }
+.account-utility a:hover, .account-utility a:focus-visible, .account-utility button:hover, .account-utility button:focus-visible { color:#fff; border-color:rgba(94,234,212,.9); outline:none; box-shadow:0 0 24px rgba(45,212,191,.42),inset 0 0 12px rgba(45,212,191,.12); }
 
 .nature-brand {
   position: relative;
@@ -411,10 +411,19 @@
   box-shadow: inset 0 0 10px rgba(0, 255, 200, 0.25);
 }
 
-.glow-nav-btn:hover {
+.glow-nav-btn:hover,
+.glow-nav-btn:focus-visible,
+.glow-nav-btn.active {
+  color: #fff;
+  outline: none;
   transform: translateY(-3px);
   box-shadow: 0 0 22px rgba(0, 255, 200, 0.45),
               inset 0 0 12px rgba(0, 255, 200, 0.25);
+}
+
+.glow-nav-btn.active {
+  border: 1px solid rgba(110, 255, 220, .5);
+  box-shadow: 0 0 28px rgba(0,255,200,.5), inset 0 0 15px rgba(0,255,200,.3);
 }
 
 .premium-glow {

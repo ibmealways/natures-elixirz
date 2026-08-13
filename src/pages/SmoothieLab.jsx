@@ -38,6 +38,7 @@ const goals = [
   ["general", "Everyday nutrition", Apple],
   ["hydration", "Hydration support", Droplets],
   ["protein", "Protein & strength", Dumbbell],
+  ["weightLoss", "Weight-management nutrition", Leaf],
   ["healthyWeight", "Healthy weight gain", Dumbbell],
   ["immune", "Immune nourishment", ShieldPlus],
   ["skin", "Skin-supportive nutrition", Sun],
@@ -46,7 +47,8 @@ const goals = [
 const goalVisualHue = {
   general: 0, focus: 22, energy: 48, mindfulness: 285, painSupport: 320,
   calm: 205, heart: 300, circulation: 185, joints: 325, blood: 350, bones: 55, cellular: 145,
-  digestion: 35, inflammation: 345, hydration: 185, protein: 65, immune: 105, skin: 15,
+  digestion: 35, inflammation: 345, hydration: 185, protein: 65, weightLoss: 115,
+  healthyWeight: 72, immune: 105, skin: 15,
 };
 
 export default function SmoothieLab() {
@@ -119,9 +121,36 @@ function ScopedSmoothieLab({ storageScope }) {
         pantryText: useOnlyPantry ? allInventoryItems.join(", ") : "",
         useOnlyPantry,
         customName,
+        variationIndex: alternateIndex,
       })
-    : baseRecipe, [preferencesLoaded, workingProfile, selectedGoals, size, selectedNames, ingredientReplacements, useOnlyPantry, allInventoryItems, customName, baseRecipe]);
+    : baseRecipe, [preferencesLoaded, workingProfile, selectedGoals, size, selectedNames, ingredientReplacements, useOnlyPantry, allInventoryItems, customName, alternateIndex, baseRecipe]);
   const recipe = generatedRecipe || previewRecipe;
+  const showingAlternatePreview = !generatedRecipe && alternateIndex > 0;
+  const displayedPreviewIngredients = generatedRecipe?.ingredients || (showingAlternatePreview ? previewRecipe.ingredients : null);
+  useEffect(() => {
+    const smoothieContext = {
+      goal,
+      selectedGoals,
+      recipeName: recipe?.name || "",
+      ingredients: (recipe?.ingredients || []).map((item) => ({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        group: item.group,
+      })).filter((item) => item.name),
+      nutrition: recipe?.nutrition || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    [sessionStorage, localStorage].forEach((storage) => {
+      try {
+        storage.setItem("naturesElixirz.latestSmoothieContext", JSON.stringify(smoothieContext));
+        storage.setItem("naturesElixirz.latestSmoothieGoal", goal);
+      } catch {
+        // Storage can be unavailable in privacy-restricted browser sessions.
+      }
+    });
+  }, [goal, recipe, selectedGoals]);
   const ingredientVisualPreview = useMemo(() => buildSmoothieVisualPreview(recipe), [recipe]);
   const blendVisualStyle = {
     "--blend-visual-height": `${Math.max(300, 660 - recipe.ingredients.length * 42)}px`,
@@ -167,7 +196,7 @@ function ScopedSmoothieLab({ storageScope }) {
   const toggleGoal = (value) => setSelectedGoals((current) => current.includes(value)
     ? (current.length === 1 ? current : current.filter((item) => item !== value))
     : [...current, value]);
-  const generate = async (variationIndex = null) => {
+  const generate = async (variationIndex = alternateIndex) => {
     if (!unlocked || !generationContext.profileReady) return;
     const requestEpoch = generationEpochRef.current + 1;
     generationEpochRef.current = requestEpoch;
@@ -194,6 +223,11 @@ function ScopedSmoothieLab({ storageScope }) {
     } catch (error) {
       if (requestEpoch !== generationEpochRef.current) return;
       console.error("AI smoothie generation failed", error);
+      if (error?.code === "functions/resource-exhausted") {
+        setGenerationStatus("limit");
+        setGenerationMessage("Your three smoothie generations for today have been used. Enjoy or revisit your saved formulas and return tomorrow for three new smoothies.");
+        return;
+      }
       nextRecipe = { ...fallbackRecipe, generationSource: "fallback" };
       setGenerationStatus("fallback");
       setGenerationMessage("The AI generator was unavailable or its proposal failed validation. This is a clearly labeled rules-based fallback, not a new AI-generated formula.");
@@ -228,7 +262,12 @@ function ScopedSmoothieLab({ storageScope }) {
   const generateAlternate = () => {
     const nextIndex = alternateIndex + 1;
     setAlternateIndex(nextIndex);
-    generate(nextIndex);
+    generationEpochRef.current += 1;
+    setGeneratedRecipe(null);
+    setGenerationStatus("idle");
+    setGenerationMessage("");
+    setVisualStatus("idle");
+    setSaved(false);
   };
   const saveRecipe = () => {
     if (!unlocked || !generatedRecipe) return;
@@ -280,8 +319,10 @@ function ScopedSmoothieLab({ storageScope }) {
       {useOnlyPantry
         ? <div className="ne-alert"><strong>Pantry-only is active.</strong> Astra will use only recognized ingredients from the pantry box above; preset recipe ingredients are excluded.</div>
         : <div className="astra-ingredient-preview">
-          <div className="astra-preview-heading"><div><span className="ne-label">Astra&apos;s ingredient preview</span><h3>Suggested for {selectedGoals.map((selected) => goals.find(([value]) => value === selected)?.[1]).join(" + ")}</h3><p>Nature&apos;s Elixirz combines your selected intentions into one balanced formula. Keep, remove, or replace any ingredient before generation.</p></div><span>{selectedNames.length} kept</span></div>
-          <div className="ingredient-choice-grid">{baseRecipe.ingredients.map((ingredient) => {
+          <div className="astra-preview-heading"><div><span className="ne-label">{generatedRecipe ? "Astra's generated ingredients" : showingAlternatePreview ? "Astra's alternate ingredient preview" : "Astra's ingredient preview"}</span><h3>{generatedRecipe ? `Used in ${generatedRecipe.name}` : showingAlternatePreview ? `Planned for ${previewRecipe.name}` : <>Suggested for {selectedGoals.map((selected) => goals.find(([value]) => value === selected)?.[1]).join(" + ")}</>}</h3><p>{generatedRecipe ? "These are the exact ingredients in the validated formula below. Change an intention or choose alternate ingredients to prepare a new preview." : showingAlternatePreview ? "These are the exact ingredients in the alternate planned formula below. Choose alternate ingredients again or generate this version." : "Nature's Elixirz combines your selected intentions into one balanced formula. Keep, remove, or replace any ingredient before generation."}</p></div><span>{displayedPreviewIngredients ? displayedPreviewIngredients.length : selectedNames.length} {generatedRecipe ? "used" : showingAlternatePreview ? "planned" : "kept"}</span></div>
+          {displayedPreviewIngredients
+            ? <div className="ingredient-choice-grid">{displayedPreviewIngredients.map((ingredient, index) => <article className="selected" key={`${ingredient.name}-${index}`}><div className="generated-ingredient-summary"><span><small>{ingredient.group}</small><strong>{ingredient.name}</strong></span><em>{generatedRecipe ? "Used" : "Planned"}</em></div><small>{formatIngredientMeasurement(ingredient.amount, ingredient.unit, measurementSystem)}</small></article>)}</div>
+            : <div className="ingredient-choice-grid">{baseRecipe.ingredients.map((ingredient) => {
             const selectionName = ingredient.sourceName || ingredient.name;
             const selected = selectedNames.includes(selectionName);
             const replacement = ingredientReplacements[selectionName] || ingredient.name;
@@ -290,10 +331,10 @@ function ScopedSmoothieLab({ storageScope }) {
               <label><input type="checkbox" checked={selected} onChange={() => toggleIngredient(selectionName)} /><span><small>{ingredient.group}</small><strong>{replacement}</strong></span><em>{selected ? "Keep" : "Removed"}</em></label>
               <label className="ingredient-replacement"><span>Replace with</span><select value={replacement} disabled={!selected} onChange={(event) => replaceIngredient(selectionName, event.target.value)}><option value={ingredient.name}>Keep {ingredient.name}</option>{alternatives.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
             </article>;
-          })}</div>
+          })}</div>}
         </div>}
       <div className="ne-alert"><strong>Pre-generation review:</strong> {generationContext.profileReady ? useOnlyPantry ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} kitchen ingredients will be reviewed.` : `${generationContext.reviewedProfileFields.length} profile areas will be reviewed. Pantry-only mode is off.` : "Complete your personal profile before Astra can generate a subscriber-specific formula."}</div>
-      <div className="generation-actions"><button className="ne-primary generate-elixir" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading"} onClick={() => generate()}>{generationStatus === "loading" ? <><Sparkles size={19} /> Astra is analyzing and formulating…</> : !unlocked ? <><LockKeyhole size={18} /> Subscribe to generate this elixir</> : !generationContext.profileReady ? <><LockKeyhole size={18} /> Complete profile to generate</> : useOnlyPantry ? <><Sparkles size={19} /> Review profile + pantry and generate</> : <><Sparkles size={19} /> Review profile + generate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button></div>
+      <div className="generation-actions"><button className="ne-primary generate-elixir" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading" || generationStatus === "limit"} onClick={() => generate()}>{generationStatus === "loading" ? <><Sparkles size={19} /> Astra is analyzing and formulating…</> : !unlocked ? <><LockKeyhole size={18} /> Subscribe to generate this elixir</> : !generationContext.profileReady ? <><LockKeyhole size={18} /> Complete profile to generate</> : useOnlyPantry ? <><Sparkles size={19} /> Review profile + pantry and generate</> : <><Sparkles size={19} /> Review profile + generate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Alternate ingredients changes the preview only. Active beta testers have no daily smoothie-generation cap during testing.</small></div>
     </section>
 
     {generationMessage && <div className={`ne-alert ${generationStatus === "fallback" ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "fallback" ? "Rules-based fallback" : "Validated AI formulation"}:</strong> {generationMessage}</div>}
@@ -326,13 +367,13 @@ function ScopedSmoothieLab({ storageScope }) {
       </article>
       <div className="under-image-cards">
         {(recipe.realityCheck || recipe.practicalTips.length > 0) && <div className="ne-panel alchemy-compact"><p className="ne-kicker">Practical guidance</p><h2>Make it work for you</h2>{recipe.realityCheck && <p className="ne-muted">{recipe.realityCheck}</p>}<ul className="ne-steps">{recipe.practicalTips.map((tip) => <li key={tip}>{tip}</li>)}</ul></div>}
-        <div className="ne-panel pairing-card"><Waves size={26} /><h2>Pair the experience</h2><p className="ne-muted">Preview the relaxation soundscape suggested for this smoothie intention.</p><Link className="ne-secondary inline-block mt-5" to={`/frequencies?goal=${goal}`}>Enter Tier 2 preview</Link></div>
+        <div className="ne-panel pairing-card"><Waves size={26} /><h2>Pair the experience</h2><p className="ne-muted">Carry this smoothie into a listening ritual or preview a coordinated meal plan.</p><div className="pairing-card-actions"><Link className="ne-secondary inline-block mt-5" to={`/frequencies?goal=${encodeURIComponent(goal)}&source=smoothie`}>Enter Tier 2 preview</Link><Link className="ne-secondary inline-block mt-3" to={`/meals?goal=${encodeURIComponent(goal)}&source=smoothie`}>Preview Tier 3 meal pairing</Link></div></div>
         <div className="ne-panel alchemy-compact"><p className="ne-kicker">Blend sequence</p><h2>Alchemy method</h2><ol className="ne-steps">{recipe.preparation.map((step) => <li key={step}>{step}</li>)}</ol></div>
       </div>
       </div>
       <aside className="recipe-sidecar">
-        <div className="ne-panel benefits-card"><p className="ne-kicker">Your smoothie assessment</p><h2>{recipe.assessment.type}</h2><p className="ne-muted">{recipe.assessment.summary}</p><div className="benefit-list">{recipe.assessment.highlights.map((item) => <div key={item.label}><strong>{item.label} · {item.level}</strong><p>{item.detail}</p></div>)}</div><div className="synergy-summary reflux-summary"><strong>Heartburn / reflux: {recipe.assessment.reflux.level}</strong><p>{recipe.assessment.reflux.summary}</p>{recipe.assessment.reflux.triggers.length > 0 && <p><b>Possible triggers:</b> {recipe.assessment.reflux.triggers.join(" ")}</p>}{recipe.assessment.reflux.adjustments.length > 0 && <p><b>Gentler options:</b> {recipe.assessment.reflux.adjustments.join(" ")}</p>}<small>Trigger foods vary by person. This is an educational screening, not a guarantee that a recipe is reflux-safe.</small></div></div>
-        <details className="ne-panel benefits-card realm-disclosure" open><summary><span><small className="ne-kicker">Ingredient intelligence</small><strong>Why these ingredients were selected</strong></span><i>Explore</i></summary><div className="realm-disclosure-body"><div className="benefit-list">{recipe.benefits.map((item, index) => <div key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{item.benefit}</p></div>)}</div>{recipe.whatHappens.length > 0 && <div className="synergy-summary"><strong>What may happen after you drink it</strong>{recipe.whatHappens.map((note) => <p key={note}>{note}</p>)}<strong>Quantum / molecular perspective</strong><p>{recipe.quantumContext}</p><small>For educational purposes only. This material does not predict an individual response and is not medical advice, diagnosis, or treatment.</small></div>}</div></details>
+        <div className="ne-panel benefits-card"><p className="ne-kicker">Your smoothie assessment</p><h2>{recipe.assessment.type}</h2><p className="ne-muted">{recipe.assessment.summary}</p><div className="benefit-list">{recipe.assessment.highlights.map((item) => <div key={item.label}><strong>{item.label} · {item.level}</strong><p>{item.detail}</p></div>)}</div>{recipe.assessment.reflux && <div className="synergy-summary reflux-summary"><strong>Heartburn / reflux: {recipe.assessment.reflux.level}</strong><p>{recipe.assessment.reflux.summary}</p>{recipe.assessment.reflux.triggers.length > 0 && <p><b>Possible triggers:</b> {recipe.assessment.reflux.triggers.join(" ")}</p>}{recipe.assessment.reflux.adjustments.length > 0 && <p><b>Gentler options:</b> {recipe.assessment.reflux.adjustments.join(" ")}</p>}<small>Shown because reflux/GERD is saved in this profile. Trigger foods vary by person; this is educational screening, not a guarantee.</small></div>}</div>
+        <details className="ne-panel benefits-card realm-disclosure" open><summary><span><small className="ne-kicker">Ingredient intelligence</small><strong>Why these ingredients were selected</strong></span><i>Explore</i></summary><div className="realm-disclosure-body"><div className="benefit-list">{recipe.benefits.map((item, index) => <div key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{item.benefit}</p></div>)}</div>{recipe.whatHappens.length > 0 && <div className="synergy-summary"><strong>What may happen after you drink it</strong>{recipe.whatHappens.map((note) => <p key={note}>{note}</p>)}<strong>Quantum / molecular perspective</strong><p>{recipe.quantumContext}</p><small>For educational purposes only. This material does not predict an individual response and is not medical advice, diagnosis, or treatment.</small></div>}{recipe.nutritionIntelligence?.evidence?.studyReadiness && <div className="synergy-summary"><strong>Future-study evidence map</strong><p>{recipe.nutritionIntelligence.evidence.studyReadiness.status === "candidate-mechanisms-identified" ? "Published ingredient research identifies molecular or biomarker measurements that could inform a future controlled study of a standardized formula." : "Current matches establish food composition only; no formula-level molecular claim is made."}</p>{recipe.nutritionIntelligence.evidence.reproducibility && <p><b>Formula reproducibility:</b> {recipe.nutritionIntelligence.evidence.reproducibility.verifiedIdentityCount} of {recipe.nutritionIntelligence.evidence.reproducibility.totalIngredientCount} ingredients have verified generic USDA identities; {recipe.nutritionIntelligence.evidence.reproducibility.normalizedMassCount} have preparation-specific gram weights. Unresolved products remain label-dependent.</p>}{recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate?.calculatedIngredientCount > 0 && <p><b>Verified USDA subtotal ({recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate.coveragePercent}% coverage):</b> {recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate.totals.energyKcal} kcal, {recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate.totals.proteinG} g protein, {recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate.totals.fiberG} g fiber, and {recipe.nutritionIntelligence.evidence.verifiedNutrientEstimate.totals.sugarG} g sugar. This is a subtotal when coverage is below 100%, not a whole-recipe total.</p>}{recipe.nutritionIntelligence.evidence.studyReadiness.candidateStudies.slice(0, 3).map((study) => <p key={`${study.ingredient}-${study.pmid}`}><b>{study.ingredient} · {study.level.replaceAll("_", " ")}:</b> {study.finding} <a href={`https://pubmed.ncbi.nlm.nih.gov/${study.pmid}/`} target="_blank" rel="noreferrer">PMID {study.pmid}</a></p>)}<small>{recipe.nutritionIntelligence.evidence.studyReadiness.boundary} Evidence catalog {recipe.nutritionIntelligence.evidence.catalogVersion}, released {recipe.nutritionIntelligence.evidence.catalogReleased}.</small></div>}</div></details>
         {recipe.optionalPowerUps.length > 0 && <div className="ne-panel benefits-card"><p className="ne-kicker">Optional power-ups</p><h2>If you have them</h2><div className="benefit-list">{recipe.optionalPowerUps.map((item) => <div key={item.name}><strong>{item.name}</strong><p>{item.reason}</p></div>)}</div></div>}
       </aside>
     </section>

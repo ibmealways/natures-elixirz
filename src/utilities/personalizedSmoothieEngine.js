@@ -112,6 +112,8 @@ const pantryGoalPreferences = {
   energy: ["Banana", "Mango", "Pineapple", "Rolled oats", "Hemp protein", "Chia seeds"],
   heart: ["Blueberries", "Strawberries", "Grapes", "Apple", "Ground flaxseed", "Chia seeds"],
   circulation: ["Cooked beet", "Blueberries", "Grapes", "Spinach", "Ground flaxseed", "Coconut water"],
+  weightLoss: ["Mixed berries", "Apple", "Spinach", "Greek yogurt", "Ground flaxseed", "Water"],
+  healthyWeight: ["Banana", "Mango", "Greek yogurt", "Rolled oats", "Peanut butter", "Soy milk"],
   joints: ["Cherries", "Blueberries", "Pineapple", "Ground flaxseed", "Ginger", "Turmeric"],
   blood: ["Strawberries", "Kiwi", "Spinach", "Pumpkin seeds", "Hemp seeds", "Greek yogurt"],
   bones: ["Greek yogurt", "Soy milk", "Chia seeds", "Kale", "Strawberries", "Hemp seeds"],
@@ -287,7 +289,7 @@ function describeWhatHappens(ingredients) {
   return notes.slice(0, 3);
 }
 
-function buildSmoothieAssessment(ingredients, nutrition, selectedGoals) {
+function buildSmoothieAssessment(ingredients, nutrition, selectedGoals, profile = {}) {
   const names = ingredients.map((item) => item.name.toLowerCase());
   const has = (...terms) => terms.some((term) => names.some((name) => name.includes(term)));
   const groups = new Set(ingredients.map((item) => item.group));
@@ -312,16 +314,18 @@ function buildSmoothieAssessment(ingredients, nutrition, selectedGoals) {
   if (has("peanut butter", "nut butter", "coconut milk", "avocado")) { triggers.push("A larger high-fat portion can be a trigger for some people."); adjustments.push("Reduce nut butter or another concentrated fat if it is a known trigger."); }
   if (has("strawber", "pineapple", "orange", "lemon", "lime", "grapefruit")) { triggers.push("Acidic fruit tolerance varies."); adjustments.push("Swap a troublesome acidic fruit for banana, pear, or melon."); }
   if (has("cocoa", "coffee", "chocolate")) { triggers.push("Chocolate or caffeine can trigger symptoms for some people."); adjustments.push("Omit cocoa, chocolate, or coffee."); }
+  const refluxEnabled = [...(profile.conditions || []), profile.otherHealthConditions || ""]
+    .some((condition) => /acid reflux|heartburn|\bgerd\b|gastroesophageal reflux/i.test(condition));
   return {
     type,
     summary: `${ingredients.length} ingredients form a ${protein ? "protein-forward" : "produce-forward"} blend with about ${nutrition.calories} calories, ${nutrition.protein} g protein, and ${nutrition.fiber} g fiber in the full batch.`,
     highlights,
-    reflux: {
+    ...(refluxEnabled ? { reflux: {
       level: triggers.length >= 3 ? "Higher trigger potential" : triggers.length ? "Moderate trigger potential" : "Lower trigger potential",
       summary: triggers.length ? "This formula is not universally reflux-safe because it contains one or more common, individually variable triggers." : "No common trigger stands out, but personal tolerance, portion size, and timing still matter.",
       triggers,
       adjustments,
-    },
+    } } : {}),
   };
 }
 
@@ -352,7 +356,7 @@ const replacements = [
 ];
 
 export function assessSafety(profile) {
-  const conditions = (profile.conditions || []).join(" ").toLowerCase();
+  const conditions = [...(profile.conditions || []), profile.otherHealthConditions || ""].join(" ").toLowerCase();
   const medications = (profile.medications || "").toLowerCase();
   const allergies = (profile.allergies || "").toLowerCase();
   const notices = [];
@@ -543,7 +547,7 @@ export function generatePersonalizedSmoothie(profile, goal = "general", sizeOz =
     safety,
     benefits: describeIngredientBenefits(ingredients),
     whatHappens: describeWhatHappens(ingredients),
-    assessment: buildSmoothieAssessment(ingredients, nutrition, selectedGoals),
+    assessment: buildSmoothieAssessment(ingredients, nutrition, selectedGoals, profile),
     quantumContext: "Quantum physics underlies molecular bonds, enzyme reactions, and electron transfer in metabolism. Traditional foodways and holistic practices can inform ingredient use, while specific benefits, amounts, and risks still require ingredient-level evidence.",
     optionalPowerUps: recommendPowerUps(ingredients, selectedGoals),
     practicalTips,

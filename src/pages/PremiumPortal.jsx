@@ -121,9 +121,12 @@ export default function PremiumPortal() {
         {checkoutMessage && <p className="portal-message" role="status">{checkoutMessage}</p>}
 
         <section className="tier-universe" id="membership-realms">
-          {tiers.map((tier) => (
+          {tiers.map((tier) => {
+            const realm = realmPortals.find((portal) => portal.id === tier.id);
+            return (
             <article id={`tier-${tier.id}`} key={tier.id} className={`tier-realm tier-realm--${tier.id} ${activeMembership && Number(profile.tier) === tier.id ? "is-current" : ""}`}>
               <div className="tier-realm__space" aria-hidden="true"><i /><i /><i /><b /></div>
+              <div className="tier-realm__art" aria-hidden="true" style={{ backgroundImage: `url("${realm?.image}")` }} />
               <div className="tier-realm__number">0{tier.id}</div>
               {tier.popular && <span className="tier-realm__badge">MOST POPULAR</span>}
               {tier.vip && <span className="tier-realm__badge tier-realm__badge--vip">V.I.P. MULTIVERSE</span>}
@@ -131,12 +134,13 @@ export default function PremiumPortal() {
                 <p className="tier-realm__eyebrow">Tier {tier.id} · Dimension</p>
                 <h3>{tier.name}</h3>
                 <p className="tier-realm__tagline">{tier.tagline}</p>
-                <div className="tier-realm__price">${billingMode === "monthly" ? tier.monthly : tier.yearly}<span>{billingMode === "monthly" ? " / month" : " / year"}</span></div>
+                {tier.vip && <p className="tier-realm__founding">First 5,000 keep this founding rate while continuously active. Regular V.I.P. afterward: ${billingMode === "monthly" ? tier.monthly : tier.yearly}{billingMode === "monthly" ? "/month" : "/year"}. Household Circle is included for every V.I.P.</p>}
+                <div className="tier-realm__price">${tier.vip ? (billingMode === "monthly" ? tier.foundingMonthly : tier.foundingYearly) : (billingMode === "monthly" ? tier.monthly : tier.yearly)}<span>{tier.vip ? " founding rate" : ""}{billingMode === "monthly" ? " / month" : " / year"}</span></div>
                 <ul className="tier-realm__features">{tier.features.map((feature) => <li key={feature}><span>✦</span>{feature}</li>)}</ul>
                 <button onClick={() => chooseTier(tier)} className="tier-realm__button">{activeMembership && Number(profile.tier) === tier.id ? (hasStripeBilling ? "Manage Current Dimension" : "Current Dimension") : activeMembership && hasStripeBilling ? "Change in Billing Portal" : `Enter Dimension ${tier.id}`}</button>
               </div>
             </article>
-          ))}
+          )})}
         </section>
       </main>
     </div>

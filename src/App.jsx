@@ -3,7 +3,15 @@
 // Nature’s Elixirz — Premium Cosmic UI + MRVI
 // ===========================================================
 
-import React, { lazy, Suspense, useEffect } from "react";
+import React, {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 import {
   BrowserRouter as Router,
@@ -35,9 +43,27 @@ const SavedSmoothies = lazy(() => import("./pages/SavedSmoothies"));
 const AstraGuide = lazy(() => import("./pages/AstraGuide"));
 const BetaAdmin = lazy(() => import("./pages/BetaAdmin"));
 const LegalCenter = lazy(() => import("./pages/LegalCenter"));
+const SupportCenter = lazy(() => import("./pages/SupportCenter"));
 
 function PageLoader() {
   return <div className="min-h-screen bg-black px-6 py-24 text-center text-emerald-200">Loading Nature&apos;s Elixirz…</div>;
+}
+
+const RESUMABLE_KERNELS = [
+  { id: "smoothie", label: "Smoothie", matches: (path) => path === "/" || path === "/smoothie", component: SmoothieLab },
+  { id: "frequencies", label: "Frequency", matches: (path) => path === "/frequencies" || path.startsWith("/frequencies/"), component: Frequencies },
+  { id: "tai-chi", label: "Tai Chi", matches: (path) => path === "/tai-chi", component: TaiChiStudio },
+  { id: "meals", label: "Meal Plans", matches: (path) => path === "/meals", component: MealPlanLab },
+  { id: "premium", label: "Plans", matches: (path) => path === "/premium", component: PremiumPortal },
+  { id: "account", label: "Profile", matches: (path) => path === "/account", component: AccountPage },
+  { id: "saved", label: "Saved", matches: (path) => path === "/saved", component: SavedSmoothies },
+  { id: "vip", label: "V.I.P.", matches: (path) => path === "/vip", component: VIPCircle },
+  { id: "astra", label: "Astra AI", matches: (path) => path === "/astra", component: AstraGuide },
+  { id: "movement", label: "Movement", matches: (path) => path === "/mrvi", component: MRVIPage },
+];
+
+function sessionScrollKey(accountKey, kernelId) {
+  return `ne-kernel-scroll:${accountKey}:${kernelId}`;
 }
 
 function EntitlementBridge() {
@@ -66,10 +92,66 @@ function EntitlementBridge() {
 // ======================================================
 function Shell() {
   const location = useLocation();
+  const { user } = useAuth();
+  const accountKey = user?.uid || "guest";
+  const activeKernel = useMemo(
+    () => RESUMABLE_KERNELS.find((kernel) => kernel.matches(location.pathname)) || null,
+    [location.pathname],
+  );
+  const [visitedKernels, setVisitedKernels] = useState(
+    () => new Set(activeKernel ? [activeKernel.id] : []),
+  );
+  const [kernelRevisions, setKernelRevisions] = useState({});
+  const previousAccountKey = useRef(accountKey);
 
   useEffect(() => {
+    if (previousAccountKey.current === accountKey) return;
+    previousAccountKey.current = accountKey;
+    setVisitedKernels(new Set(activeKernel ? [activeKernel.id] : []));
+    setKernelRevisions({});
+  }, [accountKey, activeKernel]);
+
+  useEffect(() => {
+    if (!activeKernel) return;
+    setVisitedKernels((current) => {
+      if (current.has(activeKernel.id)) return current;
+      const next = new Set(current);
+      next.add(activeKernel.id);
+      return next;
+    });
+  }, [activeKernel]);
+
+  useLayoutEffect(() => {
+    if (!activeKernel) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return undefined;
+    }
+
+    const key = sessionScrollKey(accountKey, activeKernel.id);
+    const rememberedTop = Number.parseInt(sessionStorage.getItem(key) || "0", 10);
+    window.scrollTo({ top: Number.isFinite(rememberedTop) ? rememberedTop : 0, left: 0, behavior: "auto" });
+
+    const rememberPosition = () => sessionStorage.setItem(key, String(window.scrollY));
+    window.addEventListener("scroll", rememberPosition, { passive: true });
+    return () => {
+      rememberPosition();
+      window.removeEventListener("scroll", rememberPosition);
+    };
+  }, [accountKey, activeKernel]);
+
+  const startNewKernelSession = () => {
+    if (!activeKernel) return;
+    const confirmed = window.confirm(
+      `Start a new ${activeKernel.label} session? Your saved profile, pantry, recipes, and cloud records will stay intact.`,
+    );
+    if (!confirmed) return;
+    sessionStorage.removeItem(sessionScrollKey(accountKey, activeKernel.id));
+    setKernelRevisions((current) => ({
+      ...current,
+      [activeKernel.id]: (current[activeKernel.id] || 0) + 1,
+    }));
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.pathname]);
+  };
 
   // Frequency routes use darker background
   const isFrequencyRoute =
@@ -85,46 +167,38 @@ function Shell() {
       {/* PAGE CONTENT ONLY — headers are embedded per page */}
       <div className="pt-0 pb-20 md:pb-10">
         <Suspense fallback={<PageLoader />}>
-        <Routes>
-          {/* MAIN */}
-          <Route path="/" element={<SmoothieLab />} />
-          <Route path="/smoothie" element={<SmoothieLab />} />
-          <Route path="/frequencies" element={<Frequencies />} />
-          <Route path="/tai-chi" element={<TaiChiStudio />} />
-          <Route path="/meals" element={<MealPlanLab />} />
-          <Route path="/premium" element={<PremiumPortal />} />
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/saved" element={<SavedSmoothies />} />
-          <Route path="/vip" element={<VIPCircle />} />
-          <Route path="/astra" element={<AstraGuide />} />
-          <Route path="/beta-admin" element={<BetaAdmin />} />
-          <Route path="/legal" element={<LegalCenter />} />
-          <Route path="/legal/:section" element={<LegalCenter />} />
-
-          {/* FREQUENCY SUB */}
-          <Route
-            path="/frequencies/history"
-            element={<Frequencies />}
-          />
-          <Route
-            path="/frequencies/graphs"
-            element={<Frequencies />}
-          />
-          <Route
-            path="/frequencies/chamber"
-            element={<Frequencies />}
-          />
-          <Route
-            path="/frequencies/timer"
-            element={<Frequencies />}
-          />
-
-          {/* MRVI */}
-          <Route path="/mrvi" element={<MRVIPage />} />
-          <Route path="*" element={<SmoothieLab />} />
-        </Routes>
+          {RESUMABLE_KERNELS.map((kernel) => {
+            if (!visitedKernels.has(kernel.id)) return null;
+            const KernelComponent = kernel.component;
+            const isActive = activeKernel?.id === kernel.id;
+            return (
+              <section
+                key={`${accountKey}:${kernel.id}:${kernelRevisions[kernel.id] || 0}`}
+                hidden={!isActive}
+                aria-hidden={!isActive}
+                className="kernel-workspace"
+              >
+                <KernelComponent />
+              </section>
+            );
+          })}
+          {!activeKernel && (
+            <Routes>
+              <Route path="/beta-admin" element={<BetaAdmin />} />
+              <Route path="/support" element={<SupportCenter />} />
+              <Route path="/legal" element={<LegalCenter />} />
+              <Route path="/legal/:section" element={<LegalCenter />} />
+              <Route path="*" element={<SmoothieLab />} />
+            </Routes>
+          )}
         </Suspense>
       </div>
+      {activeKernel && (
+        <aside className="kernel-session-control" aria-label={`${activeKernel.label} session controls`}>
+          <span><strong>Session resumed</strong> where you left off</span>
+          <button type="button" onClick={startNewKernelSession}>Start new session</button>
+        </aside>
+      )}
       <footer className="public-legal-footer" aria-label="Legal and support links">
         <span>© {new Date().getFullYear()} AstraMind Technologies</span>
         <nav>
@@ -133,7 +207,7 @@ function Shell() {
           <Link to="/legal/wellness">Wellness disclaimer</Link>
           <Link to="/legal/subscriptions">Subscriptions</Link>
           <Link to="/legal/deletion">Data deletion</Link>
-          <Link to="/legal/support">Support</Link>
+          <Link to="/support">Support</Link>
         </nav>
       </footer>
     </div>

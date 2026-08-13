@@ -35,12 +35,13 @@ export function mergeAiSmoothieProposal(proposal, fallback) {
     preparation: proposal.preparation,
     practicalTips: proposal.practicalTips,
     medicationSafety: proposal.medicationSafety,
+    nutritionIntelligence: proposal.nutritionIntelligence,
     optionalPowerUps: [],
     assessment: {
       type: proposal.type,
       summary: `A ${ingredients.length}-ingredient ${proposal.type.toLowerCase()} shaped around the selected intentions, dietary needs, and kitchen preferences. Nutrition values are estimates based on standard ingredient-category averages.`,
       highlights: proposal.benefits,
-      reflux: proposal.reflux,
+      ...(proposal.reflux ? { reflux: proposal.reflux } : {}),
     },
     whatHappens: [
       "Blending breaks the foods into smaller particles and disperses their water, fiber, carbohydrate, fat, protein, vitamins, minerals, and plant compounds.",

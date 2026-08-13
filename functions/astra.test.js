@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildJourneyContext, buildProfileContext, hasTierAccess, isActiveTierOne, validateConversation } from "./astra.js";
+import { buildJourneyContext, buildKernelContext, buildProfileContext, hasTierAccess, isActiveTierOne, validateConversation } from "./astra.js";
 
 test("conversation validation trims and limits history", () => {
   const result = validateConversation({
@@ -11,10 +11,44 @@ test("conversation validation trims and limits history", () => {
   assert.equal(result.history.length, 10);
 });
 
+test("conversation validation accepts a supported attachment without text", () => {
+  const result = validateConversation({
+    message: "",
+    attachments: [{
+      name: "hand.jpg",
+      type: "image/jpeg",
+      size: 128,
+      dataUrl: "data:image/jpeg;base64,YQ==",
+    }],
+  });
+  assert.equal(result.message, "");
+  assert.equal(result.attachments[0].kind, "image");
+});
+
+test("conversation validation rejects unsupported attachment types", () => {
+  assert.throws(() => validateConversation({
+    attachments: [{ name: "unsafe.exe", type: "application/x-msdownload", size: 128, dataUrl: "data:application/x-msdownload;base64,YQ==" }],
+  }), /supported file/);
+});
+
 test("profile context excludes sensitive fields unless expressly enabled", () => {
   const profile = { healthGoals: ["energy"], medications: "example medicine", conditions: ["kidney"], allergies: "peanut" };
   assert.equal(buildProfileContext(profile).medications, undefined);
   assert.equal(buildProfileContext(profile, true).medications, "example medicine");
+});
+
+test("Kernel context includes inventories but strips account and billing data", () => {
+  const context = buildKernelContext({
+    smoothieKitchen: { pantry: ["blueberries", "spinach"], password: "never" },
+    mealPlanKitchen: { pantry: ["rice"], fridge: ["eggs"], freezer: ["salmon"] },
+    currentMealPlan: { goal: "muscle", billingId: "hidden" },
+    email: "hidden@example.com",
+  });
+  assert.deepEqual(context.smoothieKitchen.pantry, ["blueberries", "spinach"]);
+  assert.deepEqual(context.mealPlanKitchen.fridge, ["eggs"]);
+  assert.equal(context.smoothieKitchen.password, undefined);
+  assert.equal(context.currentMealPlan.billingId, undefined);
+  assert.equal(context.email, undefined);
 });
 
 test("AI access requires a paid or trialing tier", () => {

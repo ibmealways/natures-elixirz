@@ -28,6 +28,17 @@ describe("subscriber profile trust boundaries", () => {
     expect(restored).toMatchObject({ name: "Member", subscriptionCurrentPeriodEnd: null, subscriptionAccessSource: null });
   });
 
+  it("removes an obsolete clearing marker from a recovered meaningful profile", () => {
+    const restored = restoreSubscriberProfile({ name: "Heather", clearedAt: "2026-08-05T04:15:24.922Z" }, "heather");
+    expect(restored.name).toBe("Heather");
+    expect(restored.clearedAt).toBeUndefined();
+  });
+
+  it("preserves a clearing marker when the cloud record is intentionally empty", () => {
+    const restored = restoreSubscriberProfile({ ...EMPTY_PROFILE, clearedAt: "2026-08-05T04:15:24.922Z" }, "cleared");
+    expect(restored.clearedAt).toBe("2026-08-05T04:15:24.922Z");
+  });
+
   it("accepts normalized server entitlement values", () => {
     const next = updateSubscriberEntitlement(EMPTY_PROFILE, { tier: 4, status: "active" });
     expect(next).toMatchObject({ tier: 4, subscriptionStatus: "active" });

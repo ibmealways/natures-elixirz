@@ -1,3 +1,5 @@
+import { assessNutritionSelection, assertNutritionSafety, createNutritionBrief } from "./nutrition-intelligence.js";
+
 const GROUPS = ["Fruit", "Vegetable", "Protein", "Seed", "Liquid", "Spice", "Grain", "Nut butter", "Sweetener"];
 const UNITS = ["cup", "tbsp", "tsp", "scoop", "piece"];
 
@@ -64,7 +66,7 @@ export const smoothieRecipeSchema = {
 export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes = [], kitchen = {}) {
   const goals = textList(request.goals).slice(0, 8);
   const pantry = ["pantry", "fridge", "freezer"].flatMap((zone) => textList(kitchen?.[zone])).slice(0, 160);
-  return {
+  const context = {
     profile: {
       age: String(profile.age || "").slice(0, 3),
       weightLb: String(profile.weight || "").slice(0, 6),
@@ -73,6 +75,8 @@ export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes
       dietaryPattern: String(profile.dietaryPattern || "omnivore").slice(0, 40),
       healthGoals: textList(profile.healthGoals).slice(0, 10),
       conditions: textList(profile.conditions).slice(0, 10),
+      otherHealthConditions: String(profile.otherHealthConditions || "").slice(0, 1000),
+      surgicalHistory: String(profile.surgicalHistory || "").slice(0, 1000),
       medications: String(profile.medications || "").slice(0, 800),
       allergies: textList(profile.allergies).slice(0, 20),
       avoidIngredients: textList(profile.avoidIngredients).slice(0, 30),
@@ -91,6 +95,8 @@ export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes
       ingredients: Array.isArray(recipe?.ingredients) ? recipe.ingredients.map((item) => String(item?.name || "")).filter(Boolean).slice(0, 12) : [],
     })),
   };
+  context.nutritionBrief = createNutritionBrief(context.profile, goals);
+  return context;
 }
 
 export function buildSmoothieInstructions(context) {
@@ -103,7 +109,8 @@ Success means:
 - materially differ from recent recipes in both its main fruit/produce combination and overall ingredient set
 - keep subscriber-facing names, reasons, and descriptions natural; never mention prompts, validation, recent-recipe comparison, internal history, or prior attempts
 - explain why each ingredient belongs in this exact formula
-- screen common reflux triggers conservatively and acknowledge individual variation
+- only include reflux guidance when nutritionBrief.refluxScreeningEnabled is true; otherwise return an empty lower-trigger reflux object because the application will suppress it
+- when reflux screening is enabled, screen common triggers conservatively and acknowledge individual variation
 - use ordinary foods and culinary herbs only; do not prescribe supplements, diagnose, promise healing, or replace professional care
 - never choose foods to intensify, boost, complement, or counteract a medication's pharmacologic effect
 - review the exact medication text for possible food interactions. Avoid a recognized conflict where a safe ordinary-food alternative exists; otherwise mark pharmacist review required
@@ -144,5 +151,13 @@ export function validateSmoothieProposal(proposal, context) {
     return prior.size && overlap / Math.min(prior.size, ingredients.length) >= 0.7;
   });
   if (tooSimilar) throw new Error("The AI recipe was too similar to a recent recipe.");
-  return { ...proposal, ingredients };
+  const nutritionIntelligence = assertNutritionSafety(assessNutritionSelection({
+    ingredients,
+    profile: context.profile,
+    goals: context.request.goals,
+    kind: "smoothie",
+  }));
+  if (nutritionIntelligence.goalFitScore < 45) throw new Error("The AI recipe did not meaningfully fit the selected nutrition goals.");
+  const reflux = context.nutritionBrief.refluxScreeningEnabled ? proposal.reflux : undefined;
+  return { ...proposal, ingredients, reflux, nutritionIntelligence };
 }

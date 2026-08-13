@@ -1,0 +1,35 @@
+.beta-mail {
+  margin-top: 1rem;
+  padding: 1.3rem;
+  border: 1px solid rgba(183, 152, 255, 0.25);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(4, 18, 23, 0.96), rgba(24, 13, 47, 0.9));
+}
+
+.beta-mail h2 { margin: 0.15rem 0; color: #effff8; }
+.beta-mail .beta-roster-heading > div > p { display: flex; align-items: center; gap: 0.4rem; color: #bca4ff; }
+.beta-mail .beta-roster-heading > small, .beta-mail-note { color: #91a69e; }
+.beta-mail form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-top: 1rem; }
+.beta-mail label { display: grid; gap: 0.4rem; color: #a8bcb4; font-size: 0.72rem; }
+.beta-mail label.wide, .beta-mail .wide { grid-column: 1 / -1; }
+.beta-mail input, .beta-mail select, .beta-mail textarea {
+  width: 100%; padding: 0.8rem; border: 1px solid rgba(111, 240, 184, 0.22);
+  border-radius: 11px; color: #effff8; background: #020914; font: inherit;
+}
+.beta-mail textarea { min-height: 18rem; resize: vertical; }
+.beta-mail-count { justify-self: end; color: #7fa399; font-size: 0.72rem; }
+.beta-mail-actions { display: flex; align-items: center; gap: 0.8rem; }
+.beta-mail-actions button, .beta-mail-actions a {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.72rem 0.9rem; border: 1px solid rgba(104, 239, 181, 0.3);
+  border-radius: 11px; font-weight: 800; text-decoration: none;
+}
+.beta-mail-actions button { color: #071f17; background: #75eeb7; }
+.beta-mail-actions a { color: #9ef4cd; background: rgba(36, 137, 100, 0.14); }
+.beta-mail-status { color: #ead58e; }
+
+@media (max-width: 700px) {
+  .beta-mail form { grid-template-columns: 1fr; }
+  .beta-mail-actions { align-items: stretch; flex-direction: column; }
+  .beta-mail .beta-roster-heading { align-items: flex-start; gap: 0.5rem; flex-direction: column; }
+}

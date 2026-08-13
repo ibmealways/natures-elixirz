@@ -14,6 +14,10 @@ describe("subscription tiers", () => {
     expect(vip.name).toContain("V.I.P.");
     expect(vip.features.some((feature) => feature.includes("Biweekly"))).toBe(true);
     expect(vip.features.some((feature) => feature.includes("gift"))).toBe(true);
+    expect(vip.features.some((feature) => feature.includes("Household Circle"))).toBe(true);
+    expect(vip.foundingMonthly).toBe(59.99);
+    expect(vip.foundingYearly).toBe(650);
+    expect(vip.monthly).toBe(99.99);
   });
 });
 

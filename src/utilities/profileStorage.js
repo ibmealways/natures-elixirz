@@ -6,7 +6,7 @@ const keyFor = (scope) => `${PROFILE_KEY_PREFIX}.${String(scope || "guest").repl
 const meaningfulProfileFieldCount = (profile = {}) => [
   profile.name, profile.age, profile.weight, profile.height, profile.sex,
   profile.medications, profile.allergies, profile.avoidIngredients,
-  profile.healthGoals?.length, profile.conditions?.length,
+  profile.healthGoals?.length, profile.conditions?.length, profile.otherHealthConditions, profile.surgicalHistory,
   profile.tobacco?.types?.length, profile.tobacco?.quantity,
   profile.alcohol?.types?.length, profile.alcohol?.quantity,
 ].filter(Boolean).length;
@@ -20,6 +20,8 @@ export const EMPTY_PROFILE = {
   activity: "moderate",
   healthGoals: [],
   conditions: [],
+  otherHealthConditions: "",
+  surgicalHistory: "",
   medications: "",
   allergies: "",
   dietaryPattern: "omnivore",
@@ -32,6 +34,8 @@ export const EMPTY_PROFILE = {
   subscriptionStatus: "preview",
   subscriptionCancelAtPeriodEnd: false,
   subscriptionCurrentPeriodEnd: null,
+  subscriptionCurrentPeriodStart: null,
+  subscriptionBillingMode: null,
   subscriptionAccessSource: null,
   completedAt: null,
 };
@@ -92,6 +96,8 @@ export function saveSubscriberProfile(profile, scope) {
     subscriptionStatus: current.subscriptionStatus,
     subscriptionCancelAtPeriodEnd: current.subscriptionCancelAtPeriodEnd,
     subscriptionCurrentPeriodEnd: current.subscriptionCurrentPeriodEnd,
+    subscriptionCurrentPeriodStart: current.subscriptionCurrentPeriodStart,
+    subscriptionBillingMode: current.subscriptionBillingMode,
     subscriptionAccessSource: current.subscriptionAccessSource,
     completedAt: new Date().toISOString(),
   };
@@ -105,7 +111,7 @@ export function restoreSubscriberProfile(profile, scope) {
   const current = getSubscriberProfile(scope);
   const hasLegacyProfileData = Boolean(profile && (
     profile.name || profile.age || profile.weight || profile.height || profile.healthGoals?.length
-    || profile.conditions?.length || profile.medications || profile.allergies || profile.avoidIngredients
+    || profile.conditions?.length || profile.otherHealthConditions || profile.surgicalHistory || profile.medications || profile.allergies || profile.avoidIngredients
     || profile.tobacco?.types?.length || profile.tobacco?.quantity
     || profile.alcohol?.types?.length || profile.alcohol?.quantity
   ));
@@ -117,9 +123,12 @@ export function restoreSubscriberProfile(profile, scope) {
     subscriptionStatus: current.subscriptionStatus,
     subscriptionCancelAtPeriodEnd: current.subscriptionCancelAtPeriodEnd,
     subscriptionCurrentPeriodEnd: current.subscriptionCurrentPeriodEnd,
+    subscriptionCurrentPeriodStart: current.subscriptionCurrentPeriodStart,
+    subscriptionBillingMode: current.subscriptionBillingMode,
     subscriptionAccessSource: current.subscriptionAccessSource,
     completedAt: profile?.completedAt || (hasLegacyProfileData ? new Date().toISOString() : null),
   };
+  if (hasLegacyProfileData) delete restored.clearedAt;
   localStorage.setItem(keyFor(scope), JSON.stringify(restored));
   return restored;
 }
@@ -137,6 +146,8 @@ export function updateSubscriberEntitlement(profile, entitlement, scope) {
     ...EMPTY_PROFILE, ...profile, tier, subscriptionStatus: status,
     subscriptionCancelAtPeriodEnd: Boolean(entitlement?.cancelAtPeriodEnd),
     subscriptionCurrentPeriodEnd: entitlement?.currentPeriodEnd || null,
+    subscriptionCurrentPeriodStart: entitlement?.currentPeriodStart || null,
+    subscriptionBillingMode: entitlement?.billingMode || null,
     subscriptionAccessSource: entitlement?.accessSource || null,
   };
   localStorage.setItem(keyFor(scope), JSON.stringify(next));

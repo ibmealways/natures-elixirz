@@ -24,9 +24,9 @@ export default function AuthForm() {
         await requestBrandedVerificationEmail();
         if (familyAccount) {
           await requestVipFamilyAccess(subscriberEmail);
-          setMessage("Account created and secure family request sent. Verify your email; access begins only after the V.I.P. subscriber approves you.");
+          setMessage(`Account created and secure family request sent. A verification email was queued automatically for ${email}. Check Inbox and Junk; access begins only after the V.I.P. subscriber approves you.`);
         } else {
-          setMessage("Account created. Check your inbox and verify your email before subscribing.");
+          setMessage(`Account created. A verification email was queued automatically for ${email}. Check Inbox and Junk before subscribing.`);
         }
       } else {
         await signInWithEmailAndPassword(auth, email, password);
