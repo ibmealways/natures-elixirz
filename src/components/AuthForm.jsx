@@ -3,7 +3,6 @@ import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmail
 import { auth, isFirebaseConfigured } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { requestVipFamilyAccess } from "../utilities/vipFamily";
-import { requestBrandedVerificationEmail } from "../utilities/emailVerification";
 
 export default function AuthForm() {
   const { user } = useAuth();
@@ -21,7 +20,6 @@ export default function AuthForm() {
     try {
       if (mode === "signup") {
         await createUserWithEmailAndPassword(auth, email, password);
-        await requestBrandedVerificationEmail();
         if (familyAccount) {
           await requestVipFamilyAccess(subscriberEmail);
           setMessage(`Account created and secure family request sent. A verification email was queued automatically for ${email}. Check Inbox and Junk; access begins only after the V.I.P. subscriber approves you.`);

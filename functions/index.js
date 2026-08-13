@@ -4,8 +4,9 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { defineBoolean, defineJsonSecret, defineSecret, defineString } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
-import { user as authUser } from "firebase-functions/v1/auth";
+import * as functionsV1 from "firebase-functions/v1";
 import { createHash, randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import Stripe from "stripe";
@@ -14,6 +15,7 @@ import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
 import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
+import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   buildKernelContext,
@@ -38,29 +40,32 @@ const enforceAppCheck = defineBoolean("ENFORCE_APP_CHECK", { default: false });
 const VIP_FAMILY_OFFER_LIMIT = 5000;
 const VIP_FAMILY_SEAT_LIMIT = 2;
 
-export const newAccountApprovalAlert = authUser().onCreate(async (userRecord) => {
+export const newAccountApprovalAlert = functionsV1.runWith({ failurePolicy: true }).auth.user().onCreate(async (userRecord) => {
   const email = String(userRecord.email || "").trim().toLowerCase();
   if (!email) return;
   const requestRef = db.doc(`betaSignupRequests/${userRecord.uid}`);
-  if ((await requestRef.get()).exists) return;
+  const requestExists = (await requestRef.get()).exists;
   const createdAtIso = userRecord.metadata?.creationTime || new Date().toISOString();
   const batch = db.batch();
-  batch.set(requestRef, {
-    uid: userRecord.uid, email, displayName: userRecord.displayName || "",
-    emailVerified: Boolean(userRecord.emailVerified), status: "pending",
-    source: "firebase-auth", createdAtIso,
-    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-  });
-  batch.set(db.collection("mail").doc(), {
-    to: ["support@natureselixirz.com"],
-    message: {
-      subject: "New Nature's Elixirz account awaiting beta approval",
-      text: `A new Nature's Elixirz account is waiting for beta authorization.\n\nEmail: ${email}\nCreated: ${createdAtIso}\n\nOpen Beta Admin: https://natures-elixirz-os.web.app/beta-admin`,
-    },
-    category: "new-beta-account-alert", accountUid: userRecord.uid,
-    createdAt: FieldValue.serverTimestamp(),
-  });
+  if (!requestExists) {
+    batch.set(requestRef, {
+      uid: userRecord.uid, email, displayName: userRecord.displayName || "",
+      emailVerified: Boolean(userRecord.emailVerified), status: "pending",
+      source: "firebase-auth", createdAtIso,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection("mail").doc(), {
+      to: ["support@natureselixirz.com"],
+      message: {
+        subject: "New Nature's Elixirz account awaiting beta approval",
+        text: `A new Nature's Elixirz account is waiting for beta authorization.\n\nEmail: ${email}\nCreated: ${createdAtIso}\n\nOpen Beta Admin: https://natures-elixirz-os.web.app/beta-admin`,
+      },
+      category: "new-beta-account-alert", accountUid: userRecord.uid,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
   await batch.commit();
+  if (!userRecord.emailVerified) await queueVerificationEmail({ uid: userRecord.uid, email, source: "account-created" });
 });
 
 export const searchTaiChiYouTube = onCall({
@@ -102,36 +107,94 @@ function verificationEmailHtml(link) {
   return `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:32px;color:#10241f"><p style="font-size:12px;letter-spacing:2px;color:#087f65">NATURE'S ELIXIRZ OS</p><h1 style="font-size:30px">Verify your email address</h1><p>Welcome to Nature's Elixirz. Confirm this email address to protect your wellness profile and unlock subscriber features.</p><p style="margin:30px 0"><a href="${link}" style="background:#12b886;color:#fff;padding:14px 22px;border-radius:999px;text-decoration:none;font-weight:700">Verify my email</a></p><p style="font-size:13px;color:#53645f">If you did not create this account, you can safely ignore this message. Nature's Elixirz will never ask for your password by email.</p></div>`;
 }
 
+async function queueVerificationEmail({ uid, email, source }) {
+  const throttleRef = db.doc(`users/${uid}/private/emailVerification`);
+  const now = Date.now();
+  const allowed = await db.runTransaction(async (transaction) => {
+    const prior = (await transaction.get(throttleRef)).data() || {};
+    const lastQueuedAt = Number(prior.lastQueuedAt || 0);
+    const preparingAt = Number(prior.preparingAt || 0);
+    if (now - lastQueuedAt < 60 * 1000 || (prior.status === "preparing" && now - preparingAt < 60 * 1000)) return false;
+    transaction.set(throttleRef, {
+      preparingAt: now, status: "preparing", source,
+      requestCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+  if (!allowed) return { queued: false, duplicate: true };
+  try {
+    const link = await getAuth().generateEmailVerificationLink(email, {
+      url: `${appUrl.value()}/account`, handleCodeInApp: false,
+    });
+    const mailRef = await db.collection("mail").add({
+      to: [email],
+      message: {
+        subject: "Verify your Nature's Elixirz email",
+        text: `Welcome to Nature's Elixirz. Verify your email address using this secure link: ${link}\n\nIf you did not create this account, ignore this message.`,
+        html: verificationEmailHtml(link),
+      },
+      createdAt: FieldValue.serverTimestamp(), category: "account-email-verification", uid,
+      accountUid: uid, source, retryAttempt: 0,
+    });
+    await throttleRef.set({
+      status: "queued", lastQueuedAt: now, mailId: mailRef.id,
+      lastError: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { queued: true };
+  } catch (error) {
+    await throttleRef.set({
+      status: "failed", lastError: String(error?.code || error?.message || "verification-queue-failed").slice(0, 300),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    throw error;
+  }
+}
+
 export const requestVerificationEmail = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before requesting verification.");
   if (request.auth.token.email_verified) return { queued: false, alreadyVerified: true };
   const uid = request.auth.uid;
   const email = String(request.auth.token.email || "").trim().toLowerCase();
   if (!email) throw new HttpsError("failed-precondition", "This account does not have an email address.");
-  const throttleRef = db.doc(`users/${uid}/private/emailVerification`);
-  const now = Date.now();
+  const result = await queueVerificationEmail({ uid, email, source: "subscriber-resend" });
+  if (result.duplicate) throw new HttpsError("resource-exhausted", "Please wait one minute before requesting another verification email.");
+  return result;
+});
+
+export const monitorMailDelivery = onDocumentUpdated("mail/{mailId}", async (event) => {
+  const before = event.data?.before.data() || {};
+  const after = event.data?.after.data() || {};
+  const action = mailFailureAction(before, after);
+  if (action.action === "ignore") return;
+  const failedRef = event.data.after.ref;
   await db.runTransaction(async (transaction) => {
-    const prior = (await transaction.get(throttleRef)).data() || {};
-    const lastRequestedAt = Number(prior.lastRequestedAt || 0);
-    if (now - lastRequestedAt < 60 * 1000) throw new HttpsError("resource-exhausted", "Please wait one minute before requesting another verification email.");
-    transaction.set(throttleRef, { lastRequestedAt: now, requestCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const current = (await transaction.get(failedRef)).data() || {};
+    if (current.autonomy?.handledAt) return;
+    const rootId = String(current.retryOf || event.params.mailId);
+    if (action.action === "retry") {
+      const retryRef = db.doc(`mail/${rootId}_retry_${action.retryAttempt}`);
+      const startTime = Timestamp.fromMillis(Date.now() + action.delayMinutes * 60 * 1000);
+      transaction.create(retryRef, retryableMailPayload(current, action.retryAttempt, rootId, startTime));
+      transaction.set(failedRef, { autonomy: {
+        handledAt: FieldValue.serverTimestamp(), action: "retry", retryMailId: retryRef.id,
+      } }, { merge: true });
+      return;
+    }
+    const alertRef = db.doc(`mail/${rootId}_failure_alert`);
+    const recipient = Array.isArray(current.to) ? current.to.join(", ") : String(current.to || "unknown");
+    transaction.create(alertRef, {
+      to: ["support@natureselixirz.com"],
+      message: {
+        subject: "Nature's Elixirz email delivery requires attention",
+        text: `Automatic delivery failed after ${action.retryAttempt} retries.\n\nCategory: ${current.category || "unknown"}\nRecipient: ${recipient}\nMail record: ${event.params.mailId}\n\nReview the Firebase mail collection and contact the subscriber through an approved alternate channel if necessary.`,
+      },
+      category: "mail-delivery-failure-alert", accountUid: current.accountUid || current.uid || null,
+      failedMailId: event.params.mailId, createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(failedRef, { autonomy: {
+      handledAt: FieldValue.serverTimestamp(), action: "alert", alertMailId: alertRef.id,
+    } }, { merge: true });
   });
-  const link = await getAuth().generateEmailVerificationLink(email, {
-    url: `${appUrl.value()}/account`,
-    handleCodeInApp: false,
-  });
-  await db.collection("mail").add({
-    to: [email],
-    message: {
-      subject: "Verify your Nature's Elixirz email",
-      text: `Welcome to Nature's Elixirz. Verify your email address using this secure link: ${link}\n\nIf you did not create this account, ignore this message.`,
-      html: verificationEmailHtml(link),
-    },
-    createdAt: FieldValue.serverTimestamp(),
-    category: "account-email-verification",
-    uid,
-  });
-  return { queued: true };
 });
 
 function publicHouseholdRequest(snapshot) {
