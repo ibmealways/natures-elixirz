@@ -18,7 +18,7 @@ import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summar
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
-import { backupReadiness, shouldReconcileLedger } from "./operations-autonomy.js";
+import { backupReadiness, shouldReconcileLedger, summarizeAutonomyHealth } from "./operations-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   astraReplySchema,
@@ -753,6 +753,8 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
     return validateAstraReply(JSON.parse(response.output_text));
   } catch (error) {
     console.error("Astra Guide request failed", { status: error.status, code: error.code });
+    try { await recordAiServiceIncident("astraGuide", request.auth.uid, error); }
+    catch (incidentError) { logger.error("operations.incident_record.failed", { service: "astraGuide", message: incidentError?.message }); }
     throw new HttpsError("unavailable", "Astra Guide is temporarily unavailable. Please try again.");
   }
 });
@@ -801,6 +803,8 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
       validationFeedback = `The prior proposal failed application validation: ${String(error.message || "invalid recipe").slice(0, 240)}. Create a different corrected recipe.`;
       if (attempt === 1) {
         logger.error("ai.smoothie_recipe.failed", { uid, status: error?.status, code: error?.code, message: error?.message });
+        try { await recordAiServiceIncident("smartSmoothie", uid, error, { attempts: 2 }); }
+        catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartSmoothie", message: incidentError?.message }); }
         throw new HttpsError("unavailable", "AI smoothie generation could not produce a validated recipe. A clearly labeled fallback can still be used.");
       }
     }
@@ -841,6 +845,8 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
       feedback = `The prior plan failed application validation: ${String(error.message || "invalid plan").slice(0, 300)}. Produce a different corrected plan.`;
       if (attempt === 1) {
         logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message });
+        try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 2, days: context.days }); }
+        catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
         throw new HttpsError("unavailable", "AI meal planning could not produce a validated plan. A clearly labeled rules-based backup can still be shown.");
       }
     }
@@ -1252,6 +1258,24 @@ async function queueOperationsAlert(id, subject, text) {
   }, { merge: false });
 }
 
+async function recordAiServiceIncident(service, uid, error, context = {}) {
+  const fingerprint = createHash("sha256")
+    .update(`${service}:${String(error?.code || error?.status || "unknown")}:${new Date().toISOString().slice(0, 13)}`)
+    .digest("hex").slice(0, 24);
+  const incidentRef = db.doc(`systemIncidents/${service}-${fingerprint}`);
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(incidentRef);
+    transaction.set(incidentRef, {
+      service, status: "open", occurrenceCount: FieldValue.increment(1),
+      affectedSubscriberHashes: FieldValue.arrayUnion(createHash("sha256").update(uid).digest("hex").slice(0, 20)),
+      errorCode: String(error?.code || error?.status || "unknown").slice(0, 100),
+      errorMessage: String(error?.message || "Service request failed").slice(0, 300),
+      context, ...(!existing.exists ? { firstObservedAt: FieldValue.serverTimestamp() } : {}),
+      lastObservedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
 async function deactivateMissingStripeSubscription(document) {
   const record = document.data() || {};
   const uid = record.uid;
@@ -1353,6 +1377,40 @@ export const validateFirestoreBackupReadiness = onSchedule({
         `Backup validation reported ${readiness.reason}. Production was not modified. Review systemOperations/firestoreBackupValidation and the Firestore Disaster Recovery console.`);
     }
     logger.info("recovery.firestore_backup.validated", status);
+  } catch (error) {
+    await finishOperation(lease, { status: "failed", reason: String(error?.message || error).slice(0, 300) });
+    throw error;
+  }
+});
+
+export const monitorAutonomyHealth = onSchedule({
+  schedule: "every 6 hours", timeZone: "America/New_York", timeoutSeconds: 120, retryCount: 1,
+}, async () => {
+  const lease = await acquireOperationLease("autonomyHealthMonitor", 15);
+  if (!lease) return;
+  try {
+    const [stripeSnapshot, backupSnapshot, incidentSnapshot, failedMailSnapshot] = await Promise.all([
+      db.doc("systemOperations/stripeEntitlementReconciliation").get(),
+      db.doc("systemOperations/firestoreBackupValidation").get(),
+      db.collection("systemIncidents").where("status", "==", "open").limit(100).get(),
+      db.collection("mail").where("autonomy.action", "==", "alert").limit(100).get(),
+    ]);
+    const summary = summarizeAutonomyHealth({
+      operations: {
+        stripeEntitlementReconciliation: stripeSnapshot.data() || {},
+        firestoreBackupValidation: backupSnapshot.data() || {},
+      },
+      unresolvedIncidents: incidentSnapshot.size,
+      failedMail: failedMailSnapshot.size,
+    });
+    await finishOperation(lease, summary);
+    if (summary.status === "attention-required") {
+      const slot = new Date().toISOString().slice(0, 13).replace(/[-T]/g, "");
+      await queueOperationsAlert(`autonomy-health-${slot}`,
+        "Nature's Elixirz autonomy health requires attention",
+        `The autonomous health monitor found:\n\n- ${summary.attention.join("\n- ")}\n\nReview systemOperations/autonomyHealthMonitor, systemIncidents, and failed mail records. Subscriber health data is not included in this alert.`);
+    }
+    logger.info("operations.autonomy_health.completed", summary);
   } catch (error) {
     await finishOperation(lease, { status: "failed", reason: String(error?.message || error).slice(0, 300) });
     throw error;
