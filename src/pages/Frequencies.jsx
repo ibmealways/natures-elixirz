@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import InAppYouTubePlayer from "../components/InAppYouTubePlayer";
+import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import TierPreviewBanner, {
   useTierAccess,
 } from "../components/TierPreviewBanner";
@@ -577,6 +578,7 @@ export default function Frequencies() {
             </button>
           </div>
         </section>
+        <KernelFeedbackContract kernel="frequency" scope={storageScope} selection={`${selected.hz} Hz · ${selected.title}`} disabled={!unlocked} />
         <p className="resonate-safety">
           Frequency labels describe listening experiences and cultural wellness
           traditions. They do not diagnose, treat, prevent, or cure health

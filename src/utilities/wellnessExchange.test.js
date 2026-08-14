@@ -48,4 +48,16 @@ describe("wellness exchange", () => {
     expect(learning.cautionIngredients).toEqual(["Kale"]);
     expect(learning.source).toBe("explicit-subscriber-feedback");
   });
+
+  it("retains kernel-contract experience as a bounded personal observation", () => {
+    recordWellnessFeedback("maya", "taiChi", {
+      sentiment: "positive", selection: "Balance flow",
+      experience: { comfort: "Comfortable", intention: "Yes" },
+      notes: "Felt steady afterward.", source: "kernel-feedback-contract",
+    });
+    const feedback = getWellnessExchange("maya").feedback.taiChi[0];
+    expect(feedback.experience).toEqual({ comfort: "Comfortable", intention: "Yes" });
+    expect(feedback.notes).toBe("Felt steady afterward.");
+    expect(feedback.source).toBe("kernel-feedback-contract");
+  });
 });

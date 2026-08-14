@@ -55,6 +55,10 @@ export function recordWellnessFeedback(scope, kernel, feedback = {}) {
     selection: String(feedback.selection || "").trim().slice(0, 120),
     ingredients: [...new Set((Array.isArray(feedback.ingredients) ? feedback.ingredients : [])
       .map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 24),
+    experience: Object.fromEntries(Object.entries(feedback.experience || {}).slice(0, 12)
+      .map(([key, value]) => [String(key).slice(0, 40), String(value || "").trim().slice(0, 80)])),
+    notes: String(feedback.notes || "").trim().slice(0, 500),
+    source: feedback.source === "kernel-feedback-contract" ? feedback.source : "quick-feedback",
     recordedAt: new Date().toISOString(),
   };
   const feedbackByKernel = current.feedback || {};

@@ -23,6 +23,7 @@ import {
 import GlowNav from "../components/GlowNav";
 import InAppYouTubePlayer from "../components/InAppYouTubePlayer";
 import TaiChiPhaseDemo from "../components/TaiChiPhaseDemo";
+import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import "../styles/taiChiMoreVideos.css";
 import TierPreviewBanner, {
   useTierAccess,
@@ -665,6 +666,7 @@ export default function TaiChiStudio() {
           {practiceProgress.recent.length > 0 && <details className="taichi-recent"><summary>View recent practice</summary><ul>{practiceProgress.recent.map((session, index) => <li key={`${session.completedAt}-${index}`}><span>{taiChiFlows[session.focus]?.title || session.focus}</span><strong>{session.minutes} min</strong><time dateTime={session.completedAt}>{new Date(session.completedAt).toLocaleDateString()}</time></li>)}</ul></details>}
         </section>
 
+        <KernelFeedbackContract kernel="taiChi" scope={storageScope} selection={flow.title} disabled={!unlocked} />
         <section className="movement-foundations">
           <article>
             <span>01</span>

@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { Link, useSearchParams } from "react-router-dom";
 import { Activity, Apple, Bone, Brain, Dna, Droplets, Dumbbell, Eye, Flame, HeartPulse, Leaf, LockKeyhole, MessageCircle, ShieldPlus, Sparkles, Sun, Waves, Zap } from "lucide-react";
 import GlowNav from "../components/GlowNav";
+import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
@@ -386,6 +387,7 @@ function ScopedSmoothieLab({ storageScope }) {
         <div className="ne-ingredient-list">{recipe.ingredients.map((ingredient, index) => <div key={`${ingredient.name}-${index}`}><span><small>{ingredient.group}</small>{ingredient.name}</span><strong>{formatIngredientMeasurement(ingredient.amount, ingredient.unit, measurementSystem)}</strong></div>)}</div>
         {recipe.substitutions.length > 0 && <p className="ne-muted">Substitutions: {recipe.substitutions.join("; ")}.</p>}
         <button onClick={saveRecipe} disabled={!unlocked || !generatedRecipe} className="ne-primary save-formula">{!unlocked || !generatedRecipe ? <><LockKeyhole size={17} /> Generate an elixir to save</> : saved ? "Saved to your library" : "Save generated recipe"}</button>{saved && <Link className="ne-secondary inline-block ml-2" to="/saved">Open library</Link>}{generatedRecipe && <div className="learning-feedback"><span>Help Astra learn from your experience:</span><button type="button" className="ne-secondary" onClick={() => recordRecipeFeedback("positive")}>Works for me</button><button type="button" className="ne-secondary" onClick={() => recordRecipeFeedback("negative")}>Not for me</button></div>}{feedbackStatus && <p className="learning-feedback-status" role="status">{feedbackStatus}</p>}
+        {generatedRecipe && <KernelFeedbackContract kernel="smoothie" scope={storageScope} selection={recipe.name} ingredients={recipe.ingredients.map((ingredient) => ingredient.name)} disabled={!unlocked} />}
         <section className="blend-visualizer" style={blendVisualStyle} aria-label={`Visual preview of ${recipe.name}`}>
           <img className={`${visualStatus === "loading" ? "visual-loading" : ""} ingredient-matched`.trim()} src={recipe.visualUrl || ingredientVisualPreview} alt={recipe.visualUrl ? `AI-generated visual of ${recipe.name} based on its ingredients` : `Ingredient-derived preview of ${recipe.name}`} />
           <div className="blend-visualizer-shade" />

@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { Link, useSearchParams } from "react-router-dom";
 import { Activity, Apple, Bone, Brain, CalendarDays, Dna, Droplets, Eye, Flame, GlassWater, HeartPulse, Leaf, LockKeyhole, MoonStar, Plus, Refrigerator, ShieldCheck, ShoppingBasket, Snowflake, Sparkles, Sun, Sunrise, Sunset, UtensilsCrossed, Warehouse, Waves, Wind, X } from "lucide-react";
 import GlowNav from "../components/GlowNav";
+import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
@@ -329,6 +330,7 @@ export default function MealPlanLab() {
       </section>
       <aside className="safety-garden"><ShieldCheck size={28} /><div><p className="ne-kicker">Safety checkpoint</p><h2>Personal needs come first</h2><p>Kidney disease, diabetes, food allergies, swallowing concerns, pregnancy, and prescribed diets require individualized professional guidance. Plans do not replace a registered dietitian.</p><button className="ne-secondary" disabled={!unlocked || !generated} onClick={() => { recordMealJourney(goal, days, generated, storageScope); setSaved(true); }}>{!unlocked && <LockKeyhole size={14} />} {saved ? "Plan connected to journey" : "Save plan and harvest list"}</button>{generated && <div className="learning-feedback"><span>Help Astra learn from this plan:</span><button type="button" className="ne-secondary" onClick={() => { recordWellnessFeedback(storageScope, "meals", { sentiment: "positive", selection: `${days}-day ${goal} plan`, ingredients: generated.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients.map((item) => item.name))) }); setFeedbackStatus("Preference learned. Future plans may favor this pattern when it remains safe and nutritionally appropriate."); }}>Works for me</button><button type="button" className="ne-secondary" onClick={() => { recordWellnessFeedback(storageScope, "meals", { sentiment: "negative", selection: `${days}-day ${goal} plan`, ingredients: generated.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients.map((item) => item.name))) }); setFeedbackStatus("Preference learned. Astra will avoid repeating this plan pattern; profile safety rules remain unchanged."); }}>Not for me</button></div>}{feedbackStatus && <p className="learning-feedback-status" role="status">{feedbackStatus}</p>}</div></aside>
     </section>
+    {generated && <KernelFeedbackContract kernel="meals" scope={storageScope} selection={`${days}-day ${goal} plan`} ingredients={generated.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients.map((item) => item.name)))} disabled={!unlocked} />}
 
     <section className="daily-meal-collage" aria-labelledby="daily-collage-title">
       <div className="meal-collage-heading">
