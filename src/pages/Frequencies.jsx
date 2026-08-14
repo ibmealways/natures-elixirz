@@ -202,6 +202,16 @@ const extendedFrequencies = [
 
 const allFrequencies = [...frequencies, ...extendedFrequencies];
 
+const emotionalWellnessPairings = [
+  { key: "anxious-moment", label: "Anxious-moment support", hz: 396, title: "Grounded Exhale", note: "A gentle listening ritual for slowing down, breathing comfortably, and finding a steadier point of attention." },
+  { key: "low-mood", label: "Low-mood support", hz: 432, title: "Gentle Uplift", note: "A familiar ambient tuning for pairing with daylight, hydration, movement, or supportive connection." },
+  { key: "racing-mind", label: "Calming a racing mind", hz: 128, title: "Quiet Mind Anchor", note: "A low, unhurried tone intended to accompany slow breathing and a simple return to the present moment." },
+  { key: "stress", label: "Stress support", hz: 417, title: "Unwind and Release", note: "A warm reflective listening choice for transitioning out of a demanding part of the day." },
+  { key: "grounding", label: "Grounding and emotional reset", hz: 174, title: "Steady Ground", note: "A low-tone option for a brief seated grounding ritual at a comfortable volume." },
+  { key: "sleep", label: "Evening wind-down", hz: 256, title: "Rest Preparation", note: "A balanced musical anchor for a quiet, screen-light evening routine before sleep." },
+  { key: "focus", label: "Overwhelm and focus support", hz: 741, title: "One-Thing Clarity", note: "A short listening cue for reducing distractions and choosing one manageable next step." },
+];
+
 function readStoredJson(key) {
   for (const storage of [sessionStorage, localStorage]) {
     try {
@@ -507,6 +517,24 @@ export default function Frequencies() {
                 do not establish a medical or healing effect. Keep high tones
                 brief and at a comfortable low volume.
               </p>
+            </div>
+          </details>
+          <details className="extended-frequency-library emotional-wellness-library">
+            <summary>
+              <span><Sparkles size={18} /> Explore emotional-wellness listening</span>
+              <small>{emotionalWellnessPairings.length} supportive intentions</small>
+            </summary>
+            <div className="extended-frequency-controls">
+              <label htmlFor="emotional-wellness-select">Choose how you would like to feel supported</label>
+              <select id="emotional-wellness-select" defaultValue="" onChange={(event) => {
+                const pairing = emotionalWellnessPairings.find(({ key }) => key === event.target.value);
+                const tone = pairing && allFrequencies.find(({ hz }) => hz === pairing.hz);
+                if (pairing && tone) setSelected({ ...tone, title: pairing.title, note: pairing.note, emotionalIntention: pairing.label });
+              }}>
+                <option value="">Select an intention...</option>
+                {emotionalWellnessPairings.map((pairing) => <option key={pairing.key} value={pairing.key}>{pairing.label} — {pairing.hz} Hz</option>)}
+              </select>
+              <p>These are optional sound-and-reflection pairings for emotional wellness. They do not treat anxiety, depression, trauma, or another mental-health condition. If distress is persistent, worsening, or feels unsafe, connect with a qualified mental-health professional or crisis service.</p>
             </div>
           </details>
         </section>
