@@ -270,7 +270,7 @@ export default function Frequencies() {
   const [videoOpen, setVideoOpen] = useState(false);
   const audioRef = useRef(null);
   const timerRef = useRef(null);
-  const durationRef = useRef(18);
+  const durationRef = useRef(60);
 
   const stop = () => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -414,9 +414,9 @@ export default function Frequencies() {
               </span>
             </div>
             <div className="frequency-actions">
-              <button onClick={playing ? stop : () => play(18)}>
+              <button onClick={playing ? stop : () => play(60)}>
                 {playing ? <Pause size={17} /> : <Play size={17} />}
-                {playing ? "Stop transmission" : "Play 18-second preview"}
+                {playing ? "Stop transmission" : "Play 60-second preview"}
               </button>
               <button
                 type="button"
