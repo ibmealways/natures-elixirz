@@ -15,6 +15,7 @@ import { billingModeFromPrice, hasActiveBetaTestingAccess, priceKey, tierFromPri
 import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
 import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
+import { assessHighRiskNutritionProfile } from "./nutrition-foundation.js";
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
@@ -789,6 +790,8 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
   const accountSnapshot = await db.doc(`users/${uid}`).get();
   const account = accountSnapshot.data() || {};
   if (!account.profile?.completedAt || !account.profile?.name) throw new HttpsError("failed-precondition", "Complete and synchronize your profile before generating.");
+  const highRiskScreen = assessHighRiskNutritionProfile(account.profile);
+  if (highRiskScreen.generationLimited) throw new HttpsError("failed-precondition", highRiskScreen.message);
   const [savedRecipes, generatedHistory] = await Promise.all([
     db.collection(`users/${uid}/recipes`).limit(12).get(),
     db.collection(`users/${uid}/smoothieAiHistory`).orderBy("createdAt", "desc").limit(12).get(),
@@ -846,6 +849,10 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   const account = (await db.doc(`users/${uid}`).get()).data() || {};
   if (!account.profile?.completedAt || !account.profile?.name) throw new HttpsError("failed-precondition", "Complete and synchronize your profile before generating.");
   const context = buildMealPlanContext(account.profile, request.data || {});
+  const highRiskScreen = assessHighRiskNutritionProfile(account.profile);
+  if (highRiskScreen.generationLimited) {
+    throw new HttpsError("failed-precondition", highRiskScreen.message);
+  }
   await consumeMealPlanGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   let feedback = "Generate the requested meal plan now.";

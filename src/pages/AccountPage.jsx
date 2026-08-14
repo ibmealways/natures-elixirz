@@ -36,7 +36,7 @@ const goals = [
   ["immune", "Immune nourishment", ShieldCheck],
   ["skin", "Skin-supportive nutrition", Sparkles],
 ];
-const conditions = ["Heart disease", "High blood pressure", "Diabetes", "Kidney disease", "Pregnancy", "Food intolerance", "Acid reflux / GERD"];
+const conditions = ["Heart disease", "Heart failure / fluid restriction", "High blood pressure", "Diabetes", "Kidney disease", "Dialysis", "Liver disease", "Pregnancy", "Breastfeeding", "Eating disorder history", "Frail / malnutrition risk", "Bariatric surgery", "Swallowing difficulty", "Severe reflux / GI disease"];
 const tobaccoTypes = ["Cigarettes", "Cigars", "Chewing tobacco", "Pipe tobacco", "Nicotine vape"];
 const alcoholTypes = ["Beer", "Wine", "Vodka", "Rum", "Whiskey", "Other spirits"];
 const consumptionFrequencies = [["none", "None currently"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["occasionally", "Occasionally"]];
@@ -153,6 +153,7 @@ export default function AccountPage() {
           <label><span>Age</span><input required min="13" max="110" type="number" value={form.age} onChange={(event) => setForm({ ...form, age: event.target.value })} /></label>
           <label><span>Weight <small>lb</small></span><input min="50" max="700" type="number" value={form.weight} onChange={(event) => setForm({ ...form, weight: event.target.value })} /></label>
           <label><span>Height <small>in</small></span><input min="40" max="90" type="number" value={form.height} onChange={(event) => setForm({ ...form, height: event.target.value })} /></label>
+          <label><span>Sex used by general nutrition equations</span><select value={form.sex} onChange={(event) => setForm({ ...form, sex: event.target.value })}><option value="">Prefer not to enter</option><option value="female">Female</option><option value="male">Male</option></select><small>This optional field is used only for general energy and DRI estimates. Clinician-set targets override it.</small></label>
           <label><span>Dietary pattern</span><select value={form.dietaryPattern} onChange={(event) => setForm({ ...form, dietaryPattern: event.target.value })}><option value="omnivore">Omnivore</option><option value="vegetarian">Vegetarian</option><option value="vegan">Vegan</option><option value="pescatarian">Pescatarian</option></select></label>
           <label><span>Activity rhythm</span><select value={form.activity} onChange={(event) => setForm({ ...form, activity: event.target.value })}><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option></select></label>
         </div>
@@ -176,7 +177,8 @@ export default function AccountPage() {
           <label className="health-conditions-field"><span>Other diagnosed health conditions <small>optional</small></span><textarea rows="3" maxLength="1000" value={form.otherHealthConditions || ""} onChange={(event) => setForm({ ...form, otherHealthConditions: event.target.value })} placeholder="List ongoing illnesses or diagnosed conditions not shown above" /><small>Include only information you want Nature&apos;s Elixirz to consider for food, movement, and safety guidance. This does not provide a diagnosis.</small></label>
           <label className="health-conditions-field"><span>Surgical history <small>optional</small></span><textarea rows="3" maxLength="1000" value={form.surgicalHistory || ""} onChange={(event) => setForm({ ...form, surgicalHistory: event.target.value })} placeholder="List relevant surgeries and approximate dates, if known" /><small>Share only surgeries you want considered for food, movement, and safety guidance. Nature&apos;s Elixirz does not provide postoperative clearance.</small></label>
           <label><span>Current medications</span><textarea rows="4" value={form.medications} onChange={(event) => setForm({ ...form, medications: event.target.value })} placeholder="Prescription and over-the-counter medicines" /></label>
-          <label><span>Allergies or intolerances</span><textarea rows="4" value={form.allergies} onChange={(event) => setForm({ ...form, allergies: event.target.value })} placeholder="Foods or ingredients that cause a reaction" /></label>
+          <label><span>Food allergies</span><textarea rows="4" value={form.allergies} onChange={(event) => setForm({ ...form, allergies: event.target.value })} placeholder="Foods that may cause an immune or emergency reaction" /><small>Allergies are mandatory exclusions. Seek emergency care for a severe reaction.</small></label>
+          <label><span>Food intolerances</span><textarea rows="4" value={form.intolerances || ""} onChange={(event) => setForm({ ...form, intolerances: event.target.value })} placeholder="Foods that cause digestive or other non-allergic symptoms" /><small>Intolerances are kept separate from allergies but are still excluded from generated recipes.</small></label>
           <label><span>Ingredients you avoid</span><textarea rows="4" value={form.avoidIngredients} onChange={(event) => setForm({ ...form, avoidIngredients: event.target.value })} placeholder="Personal, cultural, or dietary exclusions" /></label>
         </div>
       </section>

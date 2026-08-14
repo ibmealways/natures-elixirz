@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { Link, useSearchParams } from "react-router-dom";
-import { Activity, Apple, Bone, Brain, CalendarDays, Dna, Droplets, Eye, Flame, GlassWater, HeartPulse, Leaf, LockKeyhole, MoonStar, Plus, Refrigerator, ShieldCheck, ShoppingBasket, Snowflake, Sparkles, Sun, Sunrise, Sunset, UtensilsCrossed, Warehouse, Waves, Wind, X } from "lucide-react";
+import { Activity, Apple, Bone, Brain, CalendarDays, Database, Dna, Droplets, Eye, Flame, GlassWater, HeartPulse, Leaf, LockKeyhole, MoonStar, Plus, Refrigerator, ShieldCheck, ShoppingBasket, Snowflake, Sparkles, Sun, Sunrise, Sunset, UtensilsCrossed, Warehouse, Waves, Wind, X } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
@@ -19,6 +19,7 @@ import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/mealPlanStudio.css";
+import "../styles/nutritionFutureVault.css";
 
 const goals = [
   ["focus", "Brain & cognition", "Focus-supportive foods", Brain],
@@ -109,6 +110,7 @@ export default function MealPlanLab() {
   const [generationStatus, setGenerationStatus] = useState("idle");
   const [generationMessage, setGenerationMessage] = useState("");
   const [medicationSafety, setMedicationSafety] = useState(null);
+  const [nutritionIntelligence, setNutritionIntelligence] = useState(null);
   const [stockedMessage, setStockedMessage] = useState("");
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
@@ -198,6 +200,7 @@ export default function MealPlanLab() {
     planEpochRef.current = requestEpoch;
     resetPlanVisuals();
     setGenerationStatus("loading");
+    setNutritionIntelligence(null);
     setGenerationMessage(`Astra is building a ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || "personalized"} plan from your synchronized profile and kitchen inventory.`);
     let nextPlan;
     try {
@@ -230,12 +233,19 @@ export default function MealPlanLab() {
       });
       if (requestEpoch !== planEpochRef.current) return;
       nextPlan = result.data.plan;
+      setNutritionIntelligence(result.data.nutritionIntelligence || null);
       setMedicationSafety(result.data.medicationSafety || null);
       setGenerationStatus("ready");
       setGenerationMessage(`Validated AI plan created specifically for ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal}.`);
     } catch (error) {
       if (requestEpoch !== planEpochRef.current) return;
       console.error("AI meal-plan generation failed", error);
+      if (String(error?.code || "").includes("failed-precondition")) {
+        setGenerated(null);
+        setGenerationStatus("blocked");
+        setGenerationMessage(error?.message || "Generation is paused until clinician-established nutrition targets are saved.");
+        return;
+      }
       nextPlan = generateMealPlan(profile, requestedNutritionGoal, requestedDays, { kitchenItems: generationContext.kitchenItems, variationSeed, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null });
       setMedicationSafety(profile.medications ? { reviewRequired: true, status: "Pharmacist review advised", note: "The AI medication screen was unavailable. Confirm this backup plan with a pharmacist before relying on it alongside medication.", foodsAvoided: [] } : null);
       setGenerationStatus("fallback");
@@ -298,7 +308,7 @@ export default function MealPlanLab() {
       </section>
       <div className="ne-alert"><strong>Pre-generation inventory review:</strong> {isOnboarded ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total items from Pantry, Fridge, Freezer, and Smoothie pantry will be reviewed.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
       <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded} onClick={() => generate(0)}>{!unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
-      {generationMessage && <div className={`ne-alert ${generationStatus === "fallback" ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : "Rules-based backup"}:</strong> {generationMessage}</div>}
+      {generationMessage && <div className={`ne-alert ${["fallback", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : "Rules-based backup"}:</strong> {generationMessage}</div>}
       {medicationSafety && <div className={`ne-alert ${medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {medicationSafety.status}:</strong> {medicationSafety.note}{medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {medicationSafety.foodsAvoided.join(", ")}.</>} This screening cannot replace the medication label, pharmacist, or prescriber.</div>}
     </section>
 
@@ -306,6 +316,20 @@ export default function MealPlanLab() {
       <div><p className="ne-kicker">{generated ? "Personalized harvest" : "Interactive sample harvest"}</p><h2>{selectedGoal[1]} constellation</h2><p>{selectedGoal[2]} · {plan.length} day{plan.length > 1 ? "s" : ""} · {plan.length * 5} nourishment moments</p></div>
       <div className="constellation-metric"><span>{plan.length * 5}</span><small>moments mapped</small></div>
     </section>
+
+    {nutritionIntelligence?.dailyNutrition && <section className="nutrient-future-vault" aria-labelledby="nutrient-future-title">
+      <div className="nutrient-vault-core"><Database size={31} /><span>Verified data lattice</span><i /><i /></div>
+      <div className="nutrient-vault-copy"><p className="ne-kicker">Nutrition Intelligence · Evidence-aware database</p><h2 id="nutrient-future-title">Daily nutrient constellation</h2><p>Calculated subtotals are separated from data coverage. Missing brand or nutrient values remain unknown—they are never silently counted as zero.</p></div>
+      <div className="nutrient-target-grid">
+        <article><small>Energy target</small><strong>{nutritionIntelligence.dailyNutrition.targets.energyKcal ? `~${nutritionIntelligence.dailyNutrition.targets.energyKcal} kcal` : "Clinician target needed"}</strong><span>{nutritionIntelligence.dailyNutrition.targets.status}</span></article>
+        <article><small>Protein planning range</small><strong>{nutritionIntelligence.dailyNutrition.targets.proteinG ? `${nutritionIntelligence.dailyNutrition.targets.proteinG.minimum}–${nutritionIntelligence.dailyNutrition.targets.proteinG.upperPlanningRange} g` : "Not calculated"}</strong><span>Age, weight, activity + risk screen</span></article>
+        <article><small>Multi-day adequacy</small><strong>{nutritionIntelligence.dailyNutrition.multiDayAdequacyStatus === "estimated-reference-comparison" ? "Reference comparison ready" : "Insufficient verified coverage"}</strong><span>{nutritionIntelligence.dailyNutrition.days.length} day{nutritionIntelligence.dailyNutrition.days.length === 1 ? "" : "s"} assessed</span></article>
+      </div>
+      <div className="nutrient-day-grid">{nutritionIntelligence.dailyNutrition.days.map((day) => <article key={day.day}><header><strong>Day {day.day}</strong><span>{day.adequacyStatus === "estimated-reference-comparison" ? "Coverage qualified" : "Partial data"}</span></header><div>{[
+        ["Calories", day.totals.energyKcal, "kcal", day.nutrientCoveragePercent.energyKcal], ["Protein", day.totals.proteinG, "g", day.nutrientCoveragePercent.proteinG], ["Carbs", day.totals.carbohydrateG, "g", day.nutrientCoveragePercent.carbohydrateG], ["Fat", day.totals.fatG, "g", day.nutrientCoveragePercent.fatG], ["Sodium", day.totals.sodiumMg, "mg", day.nutrientCoveragePercent.sodiumMg], ["Potassium", day.totals.potassiumMg, "mg", day.nutrientCoveragePercent.potassiumMg], ["Phosphorus", day.totals.phosphorusMg, "mg", day.nutrientCoveragePercent.phosphorusMg], ["Calcium", day.totals.calciumMg, "mg", day.nutrientCoveragePercent.calciumMg], ["Iron", day.totals.ironMg, "mg", day.nutrientCoveragePercent.ironMg], ["Vitamin K", day.totals.vitaminKMcg, "mcg", day.nutrientCoveragePercent.vitaminKMcg], ["Added sugar", day.totals.addedSugarG, "g", day.nutrientCoveragePercent.addedSugarG], ["Saturated fat", day.totals.saturatedFatG, "g", day.nutrientCoveragePercent.saturatedFatG],
+      ].map(([label, value, unit, coverage]) => <span key={label}><small>{label}</small><b>{coverage > 0 ? `${value} ${unit}` : "Unknown"}</b><em>{coverage}% covered</em></span>)}</div></article>)}</div>
+      <footer><ShieldCheck size={17} /><span>{nutritionIntelligence.dailyNutrition.catalogBoundary} {nutritionIntelligence.dailyNutrition.brandedFoodBoundary}</span></footer>
+    </section>}
 
     <div className="meal-days">{plan.map((day) => <section className="day-orbit" key={day.day}>
       <div className="day-marker"><span>{String(day.day).padStart(2, "0")}</span><small>Day</small></div>

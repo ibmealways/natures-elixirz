@@ -79,7 +79,7 @@ export function createNutritionBrief(profile = {}, goals = []) {
     selectedGoals,
     targetPatterns: [...new Set(rules.flatMap((rule) => rule.required || []))],
     helpfulPatterns: [...new Set(rules.flatMap((rule) => rule.helpful || []))],
-    prohibitedIngredients: [...new Set([...asList(profile.allergies), ...asList(profile.avoidIngredients)])],
+    prohibitedIngredients: [...new Set([...asList(profile.allergies), ...asList(profile.intolerances), ...asList(profile.avoidIngredients)])],
     professionalReviewRequired: medicationsPresent || kidneyAware,
     refluxScreeningEnabled: refluxProfileEnabled(profile),
     reviewReason: medicationsPresent

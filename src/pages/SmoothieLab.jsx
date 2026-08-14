@@ -247,6 +247,12 @@ function ScopedSmoothieLab({ storageScope }) {
         setGenerationMessage("Your three smoothie generations for today have been used. Enjoy or revisit your saved formulas and return tomorrow for three new smoothies.");
         return;
       }
+      if (String(error?.code || "").includes("failed-precondition")) {
+        setGeneratedRecipe(null);
+        setGenerationStatus("blocked");
+        setGenerationMessage(error?.message || "Generation is paused until clinician-established nutrition or texture targets are saved.");
+        return;
+      }
       nextRecipe = { ...fallbackRecipe, generationSource: "fallback" };
       setGenerationStatus("fallback");
       setGenerationMessage("The AI generator was unavailable or its proposal failed validation. This is a clearly labeled rules-based fallback, not a new AI-generated formula.");
@@ -366,7 +372,7 @@ function ScopedSmoothieLab({ storageScope }) {
       <div className="generation-actions"><button className="ne-primary generate-elixir" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading" || generationStatus === "limit"} onClick={() => generate()}>{generationStatus === "loading" ? <><Sparkles size={19} /> Astra is analyzing and formulating…</> : !unlocked ? <><LockKeyhole size={18} /> Subscribe to generate this elixir</> : !generationContext.profileReady ? <><LockKeyhole size={18} /> Complete profile to generate</> : useOnlyPantry ? <><Sparkles size={19} /> Review profile + pantry and generate</> : <><Sparkles size={19} /> Review profile + generate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Alternate ingredients changes the preview only. Active beta testers have no daily smoothie-generation cap during testing.</small></div>
     </section>
 
-    {generationMessage && <div className={`ne-alert ${generationStatus === "fallback" ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "fallback" ? "Rules-based fallback" : "Validated AI formulation"}:</strong> {generationMessage}</div>}
+    {generationMessage && <div className={`ne-alert ${["fallback", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "fallback" ? "Rules-based fallback" : generationStatus === "blocked" ? "Safety gate active" : "Validated AI formulation"}:</strong> {generationMessage}</div>}
     {generatedRecipe?.medicationSafety && <div className={`ne-alert ${generatedRecipe.medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {generatedRecipe.medicationSafety.status}:</strong> {generatedRecipe.medicationSafety.note}{generatedRecipe.medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {generatedRecipe.medicationSafety.foodsAvoided.join(", ")}.</>} Confirm individual compatibility with the medication label, pharmacist, or prescriber.</div>}
     {generatedRecipe && profile.medications && !generatedRecipe.medicationSafety && <div className="ne-alert ne-alert-danger"><strong>Medication review unavailable:</strong> Do not rely on this fallback formula for medication compatibility. Confirm it with a pharmacist.</div>}
 

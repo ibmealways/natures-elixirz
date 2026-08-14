@@ -24,6 +24,7 @@ export const EMPTY_PROFILE = {
   surgicalHistory: "",
   medications: "",
   allergies: "",
+  intolerances: "",
   dietaryPattern: "omnivore",
   avoidIngredients: "",
   tobacco: { types: [], frequency: "none", quantity: "" },

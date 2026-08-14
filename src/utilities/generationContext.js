@@ -16,6 +16,7 @@ export function buildGenerationContext(profile = {}, inventory = {}, kernelBrief
     profile.surgicalHistory && "surgical history",
     profile.medications && "medications",
     profile.allergies && "allergies",
+    profile.intolerances && "intolerances",
     profile.dietaryPattern && "dietary pattern",
     profile.avoidIngredients && "avoid list",
   ].filter(Boolean);

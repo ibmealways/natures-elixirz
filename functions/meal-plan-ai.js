@@ -1,4 +1,6 @@
 import { assessNutritionSelection, assertNutritionSafety, createNutritionBrief } from "./nutrition-intelligence.js";
+import { validateMealDayQuantities, validateMealIngredientQuantity } from "./meal-quantity-validation.js";
+import { assessHighRiskNutritionProfile, summarizeMultiDayNutrition } from "./nutrition-foundation.js";
 
 const MEAL_TYPES = ["Smoothie", "Breakfast", "Lunch", "Snack", "Dinner"];
 
@@ -111,6 +113,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
     frequencyIncludedBySubscriber: includeFrequency,
     profile: {
       age: String(profile.age || "").slice(0, 8),
+      sex: String(profile.sex || profile.biologicalSex || "").slice(0, 20),
       weight: String(profile.weight || "").slice(0, 12),
       height: String(profile.height || "").slice(0, 12),
       dietaryPattern: String(profile.dietaryPattern || "omnivore").slice(0, 40),
@@ -120,6 +123,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       otherHealthConditions: String(profile.otherHealthConditions || "").slice(0, 1000),
       surgicalHistory: String(profile.surgicalHistory || "").slice(0, 1000),
       allergies: String(profile.allergies || "").slice(0, 500),
+      intolerances: String(profile.intolerances || "").slice(0, 500),
       avoidIngredients: String(profile.avoidIngredients || "").slice(0, 500),
       medications: String(profile.medications || "").slice(0, 500),
     },
@@ -133,6 +137,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
     },
   };
   context.nutritionBrief = createNutritionBrief(context.profile, [context.goal]);
+  context.highRiskScreen = assessHighRiskNutritionProfile(context.profile);
   return context;
 }
 
@@ -176,7 +181,7 @@ const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9
 
 export function validateMealPlanProposal(proposal, context) {
   if (!proposal || !Array.isArray(proposal.days) || proposal.days.length !== context.days) throw new Error("Incorrect number of days.");
-  const restrictions = `${context.profile.allergies},${context.profile.avoidIngredients}`
+  const restrictions = `${context.profile.allergies},${context.profile.intolerances},${context.profile.avoidIngredients}`
     .split(/[,;\n]/).map(normalize).filter((item) => item.length > 2);
   const kitchen = context.kitchenItems.map(normalize);
   const planDishes = new Set();
@@ -201,7 +206,9 @@ export function validateMealPlanProposal(proposal, context) {
         const normalized = normalize(name);
         if (!name || restrictions.some((item) => normalized.includes(item))) throw new Error(`Restricted ingredient proposed: ${name}`);
         const onHand = kitchen.some((item) => item && (item.includes(normalized) || normalized.includes(item)));
-        return { quantity: String(ingredient.quantity).trim(), name, availability: onHand ? "on-hand" : "needed" };
+        const quantity = String(ingredient.quantity).trim();
+        const quantityValidation = validateMealIngredientQuantity({ quantity, name });
+        return { quantity, name, availability: onHand ? "on-hand" : "needed", quantityValidation };
       });
       const dishKey = normalize(meal.food);
       if (seen.has(dishKey)) throw new Error("Duplicate dish in the same day.");
@@ -226,9 +233,10 @@ export function validateMealPlanProposal(proposal, context) {
         nutritionIntelligence,
       };
     });
+    const quantityValidation = validateMealDayQuantities(meals);
     const dailyGoalFit = Math.round(meals.reduce((total, meal) => total + meal.nutritionIntelligence.goalFitScore, 0) / meals.length);
     if (dailyGoalFit < 35) throw new Error(`Day ${dayIndex + 1} did not meaningfully fit the selected nourishment goal.`);
-    return { day: dayIndex + 1, reviewedProfile: true, reviewedKitchenItems: context.kitchenItems.length, dailyGoalFit, meals, generationSource: "openai" };
+    return { day: dayIndex + 1, reviewedProfile: true, reviewedKitchenItems: context.kitchenItems.length, dailyGoalFit, quantityValidation, meals, generationSource: "openai" };
   });
 }
 
@@ -238,12 +246,15 @@ export function summarizeMealPlanIntelligence(plan, context) {
     ? Math.round(assessments.reduce((total, item) => total + item.goalFitScore, 0) / assessments.length)
     : 0;
   return {
-    version: "nutrition-intelligence-v1",
+    version: "nutrition-intelligence-v2",
     selectedGoal: context.goal,
     averageGoalFit,
     mealsReviewed: assessments.length,
     professionalReviewRequired: assessments.some((item) => item.requiresProfessionalReview),
     warnings: [...new Set(assessments.flatMap((item) => item.warnings))],
+    highRiskScreen: context.highRiskScreen || assessHighRiskNutritionProfile(context.profile),
+    dailyNutrition: summarizeMultiDayNutrition(plan, context.profile),
+    goalFitBoundary: "Goal fit measures ingredient-pattern alignment only. It is not a nutrient-adequacy score.",
     boundary: "Educational food guidance only. A qualified clinician or pharmacist must confirm individual medical and medication compatibility.",
   };
 }

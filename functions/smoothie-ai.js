@@ -79,6 +79,7 @@ export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes
       surgicalHistory: String(profile.surgicalHistory || "").slice(0, 1000),
       medications: String(profile.medications || "").slice(0, 800),
       allergies: textList(profile.allergies).slice(0, 20),
+      intolerances: textList(profile.intolerances).slice(0, 20),
       avoidIngredients: textList(profile.avoidIngredients).slice(0, 30),
     },
     request: {
@@ -140,7 +141,7 @@ const normalized = (value) => String(value || "").toLowerCase().replace(/[^a-z0-
 
 export function validateSmoothieProposal(proposal, context) {
   if (!proposal || !Array.isArray(proposal.ingredients)) throw new Error("The AI recipe was incomplete.");
-  const prohibited = [...context.profile.allergies, ...context.profile.avoidIngredients].map(normalized).filter(Boolean);
+  const prohibited = [...context.profile.allergies, ...context.profile.intolerances, ...context.profile.avoidIngredients].map(normalized).filter(Boolean);
   const pantry = new Set(context.pantry.map(normalized));
   const seen = new Set();
   const ingredients = proposal.ingredients.map((item) => {
