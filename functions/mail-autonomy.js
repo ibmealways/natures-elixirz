@@ -4,6 +4,7 @@ export const RETRYABLE_MAIL_CATEGORIES = new Set([
   "subscriber-support-request",
   "subscriber-support-confirmation",
   "vip-household-access",
+  "household-kitchen-request",
 ]);
 
 export const MAX_AUTOMATIC_MAIL_RETRIES = 2;

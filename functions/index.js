@@ -213,6 +213,26 @@ function publicHouseholdRequest(snapshot) {
   };
 }
 
+const kitchenZones = ["pantry", "fridge", "freezer"];
+const cleanKitchenItems = (items = []) => [...new Map((Array.isArray(items) ? items : [])
+  .map((item) => String(item || "").trim()).filter(Boolean)
+  .map((item) => [item.toLowerCase(), item])).values()];
+const cleanKitchen = (value = {}) => Object.fromEntries(kitchenZones.map((zone) => [zone, cleanKitchenItems(value?.[zone])]));
+const mergeKitchens = (left = {}, right = {}) => Object.fromEntries(kitchenZones
+  .map((zone) => [zone, cleanKitchenItems([...(left?.[zone] || []), ...(right?.[zone] || [])])]));
+const kitchensChanged = (before = {}, after = {}) => JSON.stringify({ kitchen: cleanKitchen(before.kitchen), mealKitchen: cleanKitchen(before.mealKitchen) })
+  !== JSON.stringify({ kitchen: cleanKitchen(after.kitchen), mealKitchen: cleanKitchen(after.mealKitchen) });
+const publicKitchenLink = (snapshot, uid) => {
+  const value = snapshot.data() || {};
+  const otherIndex = (value.participantUids || []).findIndex((participantUid) => participantUid !== uid);
+  return {
+    id: snapshot.id, status: value.status || "pending",
+    direction: value.recipientUid === uid ? "incoming" : "outgoing",
+    otherEmail: (value.participantEmails || [])[otherIndex] || "Household member",
+    requesterUid: value.requesterUid || null, recipientUid: value.recipientUid || null,
+  };
+};
+
 async function queueHouseholdAlert({ to, memberEmail, requestId }) {
   const accountUrl = `${appUrl.value()}/account?household=${encodeURIComponent(requestId)}`;
   await db.collection("mail").add({
@@ -1001,6 +1021,113 @@ export const manageVipFamilyAccess = onCall({ invoker: "public", enforceAppCheck
   });
   logger.info(`vip.household.${action}`, { ownerUid: request.auth.uid, memberUid: record.memberUid });
   return { status: action === "approve" ? "approved" : action === "block" ? "blocked" : "removed" };
+});
+
+export const requestHouseholdKitchenLink = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before connecting a household pantry.");
+  const requesterEmail = String(request.auth.token.email || "").trim().toLowerCase();
+  const recipientEmail = String(request.data?.email || "").trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(recipientEmail)) throw new HttpsError("invalid-argument", "Enter the family member's account email.");
+  if (recipientEmail === requesterEmail) throw new HttpsError("invalid-argument", "Choose a different account.");
+  let recipient;
+  try { recipient = await getAuth().getUserByEmail(recipientEmail); }
+  catch { throw new HttpsError("not-found", "No verified Nature's Elixirz account was found for that email."); }
+  if (!recipient.emailVerified) throw new HttpsError("failed-precondition", "The family member must verify their email first.");
+  const participantUids = [request.auth.uid, recipient.uid].sort();
+  const participantEmails = participantUids.map((uid) => uid === request.auth.uid ? requesterEmail : recipientEmail);
+  const linkRef = db.doc(`householdKitchenLinks/${participantUids.join("_")}`);
+  await db.runTransaction(async (transaction) => {
+    const existing = (await transaction.get(linkRef)).data() || {};
+    if (existing.status === "blocked" && existing.blockedBy === recipient.uid) throw new HttpsError("permission-denied", "This pantry connection cannot be requested.");
+    transaction.set(linkRef, {
+      participantUids, participantEmails, requesterUid: request.auth.uid, requesterEmail,
+      recipientUid: recipient.uid, recipientEmail, status: "pending",
+      createdAt: existing.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+  await db.collection("mail").add({
+    to: [recipientEmail], category: "household-kitchen-request", accountUid: recipient.uid,
+    message: {
+      subject: "Household pantry connection request",
+      text: `${requesterEmail} invited you to share Smoothie and Meal Plan pantry inventories in Nature's Elixirz. Sign in and open Account Vault to approve or decline. No health profile, medication, recipe, or activity data will be shared.`,
+    }, createdAt: FieldValue.serverTimestamp(),
+  });
+  return { status: "pending", message: "Pantry request sent. Synchronization begins only after the family member approves it." };
+});
+
+export const getHouseholdKitchenLinks = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to view household pantry connections.");
+  const snapshot = await db.collection("householdKitchenLinks").where("participantUids", "array-contains", request.auth.uid).get();
+  return { links: snapshot.docs.map((document) => publicKitchenLink(document, request.auth.uid)) };
+});
+
+export const manageHouseholdKitchenLink = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to manage a household pantry connection.");
+  const linkId = String(request.data?.linkId || "").trim();
+  const action = String(request.data?.action || "");
+  if (!linkId || !["approve", "block", "disconnect"].includes(action)) throw new HttpsError("invalid-argument", "Choose a valid pantry action.");
+  const linkRef = db.doc(`householdKitchenLinks/${linkId}`);
+  const linkSnapshot = await linkRef.get();
+  const link = linkSnapshot.data();
+  if (!link || !link.participantUids?.includes(request.auth.uid)) throw new HttpsError("permission-denied", "That pantry connection does not belong to this account.");
+  if (["approve", "block"].includes(action) && link.recipientUid !== request.auth.uid) throw new HttpsError("permission-denied", "Only the invited family member can decide this request.");
+  if (action === "approve") {
+    const [activeForRequester, activeForRecipient, requesterSnapshot, recipientSnapshot] = await Promise.all([
+      db.collection("householdKitchenLinks").where("participantUids", "array-contains", link.requesterUid).get(),
+      db.collection("householdKitchenLinks").where("participantUids", "array-contains", link.recipientUid).get(),
+      db.doc(`users/${link.requesterUid}`).get(), db.doc(`users/${link.recipientUid}`).get(),
+    ]);
+    const conflicting = [...activeForRequester.docs, ...activeForRecipient.docs]
+      .find((document) => document.id !== linkId && document.data()?.status === "active");
+    if (conflicting) throw new HttpsError("failed-precondition", "One of these accounts already has an active pantry connection. Disconnect it first.");
+    const requester = requesterSnapshot.data() || {};
+    const recipient = recipientSnapshot.data() || {};
+    const kitchen = mergeKitchens(requester.kitchen, recipient.kitchen);
+    const mealKitchen = mergeKitchens(requester.mealKitchen, recipient.mealKitchen);
+    const version = randomUUID();
+    const batch = db.batch();
+    batch.set(linkRef, { status: "active", approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastSyncVersion: version }, { merge: true });
+    for (const uid of link.participantUids) batch.set(db.doc(`users/${uid}`), {
+      kitchen, mealKitchen, householdKitchenSync: { source: "household-link", linkId, version, synchronizedAt: FieldValue.serverTimestamp() },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+    return { status: "active" };
+  }
+  await linkRef.set({
+    status: action === "block" ? "blocked" : "disconnected",
+    ...(action === "block" ? { blockedBy: request.auth.uid } : { disconnectedBy: request.auth.uid }),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { status: action === "block" ? "blocked" : "disconnected" };
+});
+
+export const syncHouseholdKitchenLinks = onDocumentUpdated("users/{uid}", async (event) => {
+  const before = event.data?.before.data() || {};
+  const after = event.data?.after.data() || {};
+  if (!kitchensChanged(before, after)) return;
+  if (before.householdKitchenSync?.version !== after.householdKitchenSync?.version
+    && after.householdKitchenSync?.source === "household-link") return;
+  const links = await db.collection("householdKitchenLinks")
+    .where("participantUids", "array-contains", event.params.uid).get();
+  if (links.empty) return;
+  for (const linkSnapshot of links.docs) {
+    const link = linkSnapshot.data() || {};
+    if (link.status !== "active") continue;
+    const otherUid = (link.participantUids || []).find((uid) => uid !== event.params.uid);
+    if (!otherUid) continue;
+    const version = randomUUID();
+    const batch = db.batch();
+    batch.set(db.doc(`users/${otherUid}`), {
+      kitchen: cleanKitchen(after.kitchen), mealKitchen: cleanKitchen(after.mealKitchen),
+      householdKitchenSync: { source: "household-link", linkId: linkSnapshot.id, version, synchronizedAt: FieldValue.serverTimestamp() },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(linkSnapshot.ref, {
+      lastSyncedBy: event.params.uid, lastSyncVersion: version, lastSyncedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+  }
 });
 
 async function reserveFoundingVip(uid) {

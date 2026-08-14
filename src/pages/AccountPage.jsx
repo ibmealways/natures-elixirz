@@ -11,6 +11,7 @@ import AuthForm from "../components/AuthForm";
 import CloudSyncPanel from "../components/CloudSyncPanel";
 import AccountControls from "../components/AccountControls";
 import VipFamilyAccess from "../components/VipFamilyAccess";
+import HouseholdKitchenLinks from "../components/HouseholdKitchenLinks";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/profileVault.css";
@@ -207,7 +208,7 @@ export default function AccountPage() {
 
     <section className="cloud-vault" id="account-access">
       <div className="cloud-vault-heading"><i><Cloud size={24} /></i><div><p className="ne-kicker">Optional cloud identity</p><h2>Carry your constellation between devices.</h2><p>Account authentication uses email and password. No biometric information is collected.</p></div></div>
-      <div className="cloud-vault-console"><AuthForm /><CloudSyncPanel /><AccountControls /><VipFamilyAccess /></div>
+      <div className="cloud-vault-console"><AuthForm /><CloudSyncPanel /><HouseholdKitchenLinks /><AccountControls /><VipFamilyAccess /></div>
     </section>
   </main></div>;
 }

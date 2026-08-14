@@ -9,6 +9,12 @@ test("mail failure automation retries a newly failed verification message", () =
   ), { action: "retry", retryAttempt: 1, delayMinutes: 2 });
 });
 
+test("mail failure automation retries a household pantry invitation", () => {
+  assert.deepEqual(mailFailureAction({}, {
+    category: "household-kitchen-request", delivery: { state: "ERROR" }, retryAttempt: 0,
+  }), { action: "retry", retryAttempt: 1, delayMinutes: 2 });
+});
+
 test("mail failure automation escalates after two retries", () => {
   assert.deepEqual(mailFailureAction({}, {
     category: "account-email-verification", retryAttempt: 2, delivery: { state: "ERROR" },
