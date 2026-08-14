@@ -13,10 +13,12 @@ const meal = (type, food) => ({
 
 describe("meal plan AI contract", () => {
   it("carries the selected goal and inventory into its instructions", () => {
-    const context = buildMealPlanContext({ dietaryPattern: "omnivore" }, { goal: "muscles", goalLabel: "Muscle nourishment", days: 1, kitchenItems: ["Chicken"] });
+    const context = buildMealPlanContext({ dietaryPattern: "omnivore" }, { goal: "muscles", goalLabel: "Muscle nourishment", days: 1, kitchenItems: ["Chicken"], learning: { source: "explicit-subscriber-feedback", dislikedSelections: ["Repeated chicken plan"] } });
     const instructions = buildMealPlanInstructions(context);
     assert.match(instructions, /Muscle nourishment/);
     assert.match(instructions, /Chicken/);
+    assert.match(instructions, /Repeated chicken plan/);
+    assert.match(instructions, /never overrides allergies/i);
   });
 
   it("validates five ordered meals and independently computes pantry availability", () => {

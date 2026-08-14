@@ -21,6 +21,13 @@ test("AI smoothie context excludes the subscriber name and bounds inputs", () =>
   assert.equal(context.request.sizeOz, 24);
 });
 
+test("AI smoothie context accepts only bounded explicit learning signals", () => {
+  const context = buildSmoothieAiContext({}, { learning: { source: "explicit-subscriber-feedback", feedbackCount: 99, likedSelections: ["Berry blend"], cautionIngredients: ["Kale"] } }, [], {});
+  assert.equal(context.learning.source, "explicit-subscriber-feedback");
+  assert.equal(context.learning.feedbackCount, 30);
+  assert.deepEqual(context.learning.cautionIngredients, ["Kale"]);
+});
+
 test("AI smoothie validator rejects allergens and pantry inventions", () => {
   const allergyContext = buildSmoothieAiContext({ allergies: "blueberry" }, {}, [], {});
   assert.throws(() => validateSmoothieProposal(baseProposal, allergyContext), /prohibited ingredient/i);

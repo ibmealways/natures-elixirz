@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildKernelBrief, getWellnessExchange, publishWellnessSignal } from "./wellnessExchange";
+import { buildKernelBrief, buildLearningProfile, getWellnessExchange, publishWellnessSignal, recordWellnessFeedback } from "./wellnessExchange";
 
 const storage = () => {
   const values = new Map();
@@ -36,5 +36,16 @@ describe("wellness exchange", () => {
     expect(memory.goals).toEqual(["energy", "focus"]);
     expect(memory.selections).toEqual(["Berry blend", "Green blend"]);
     expect(memory.recent).toHaveLength(2);
+  });
+
+  it("builds learning only from explicit subscriber feedback", () => {
+    recordWellnessFeedback("ivan", "smoothie", { sentiment: "positive", selection: "Berry blend", ingredients: ["Blueberries", "Hemp seeds"] });
+    recordWellnessFeedback("ivan", "smoothie", { sentiment: "negative", selection: "Very green blend", ingredients: ["Kale"] });
+    const learning = buildLearningProfile(getWellnessExchange("ivan"), "smoothie");
+    expect(learning.likedSelections).toEqual(["Berry blend"]);
+    expect(learning.dislikedSelections).toEqual(["Very green blend"]);
+    expect(learning.preferredIngredients).toContain("Blueberries");
+    expect(learning.cautionIngredients).toEqual(["Kale"]);
+    expect(learning.source).toBe("explicit-subscriber-feedback");
   });
 });

@@ -123,6 +123,14 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       avoidIngredients: String(profile.avoidIngredients || "").slice(0, 500),
       medications: String(profile.medications || "").slice(0, 500),
     },
+    learning: {
+      feedbackCount: Math.min(30, Math.max(0, Number(request.learning?.feedbackCount) || 0)),
+      likedSelections: cleanList(request.learning?.likedSelections, 10),
+      dislikedSelections: cleanList(request.learning?.dislikedSelections, 10),
+      preferredIngredients: cleanList(request.learning?.preferredIngredients, 12),
+      cautionIngredients: cleanList(request.learning?.cautionIngredients, 12),
+      source: request.learning?.source === "explicit-subscriber-feedback" ? "explicit-subscriber-feedback" : "none",
+    },
   };
   context.nutritionBrief = createNutritionBrief(context.profile, [context.goal]);
   return context;
@@ -138,6 +146,7 @@ SUBSCRIBER PROFILE: ${JSON.stringify(context.profile)}
 AVAILABLE PANTRY, FRIDGE, AND FREEZER ITEMS: ${JSON.stringify(context.kitchenItems)}
 LATEST TIER 1 SMOOTHIE CONTEXT: ${JSON.stringify(context.smoothieContext)}
 OPTIONAL TIER 2 FREQUENCY CONTEXT: ${context.frequencyIncludedBySubscriber ? JSON.stringify(context.frequencyContext) : "Not included—the subscriber came directly from Tier 1 or did not choose Frequency."}
+EXPLICIT SUBSCRIBER FEEDBACK: ${JSON.stringify(context.learning)}
 ALTERNATE REQUEST NUMBER: ${context.variation}
 
 Requirements:
@@ -147,6 +156,7 @@ Requirements:
 - Respect every allergy, intolerance, dietary pattern, avoided ingredient, and relevant condition. Never claim treatment, prevention, detoxification, or guaranteed organ benefit.
 - Prefer coherent recognizable dishes. Never create pairings such as meat with fruit as a snack, beans with waffles unless it is a recognizable savory recipe, or ingredients that do not make culinary sense together.
 - Use available kitchen items where they fit naturally. Mark them on-hand. You may add goal-supportive missing foods and mark them needed so the app can build a shopping list.
+- Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
 - Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner. Avoid repeating the same dish or dominant ingredients across days.
 - Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, oz, piece, or count. Do not use decimals.

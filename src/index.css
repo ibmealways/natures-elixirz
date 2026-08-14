@@ -540,6 +540,31 @@ body { top: 0 !important; }
   display: none !important;
 }
 
+.learning-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+  margin-top: .75rem;
+}
+
+.learning-feedback > span {
+  color: #9fc9bc;
+  font-size: .7rem;
+}
+
+.learning-feedback .ne-secondary {
+  padding: .5rem .7rem;
+  font-size: .68rem;
+}
+
+.learning-feedback-status {
+  margin-top: .6rem;
+  color: #8ff4cf;
+  font-size: .7rem;
+  line-height: 1.5;
+}
+
 .kernel-session-control {
   position: fixed;
   left: max(1rem, env(safe-area-inset-left));

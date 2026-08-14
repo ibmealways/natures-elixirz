@@ -13,7 +13,7 @@ import { allKitchenIngredients, getKitchenInventory, saveKitchenInventory } from
 import { saveRecipe as saveRecipeToLibrary } from "../utilities/recipeStorage";
 import { recordSmoothieJourney } from "../utilities/wellnessJourney";
 import { buildGenerationContext } from "../utilities/generationContext";
-import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessExchange";
+import { buildKernelBrief, publishWellnessSignal, recordWellnessFeedback } from "../utilities/wellnessExchange";
 import { getSmoothiePreference, saveSmoothiePreference } from "../utilities/smoothiePreferences";
 import { buildSmoothieVisualPreview } from "../utilities/smoothieVisualPreview";
 import { mergeAiSmoothieProposal } from "../utilities/aiSmoothie";
@@ -97,6 +97,7 @@ function ScopedSmoothieLab({ storageScope }) {
   const [generationStatus, setGenerationStatus] = useState("idle");
   const [generationMessage, setGenerationMessage] = useState("");
   const [saved, setSaved] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState("");
   const [alternateIndex, setAlternateIndex] = useState(0);
   const pantryText = inventory[kitchenZone].join(", ");
   const allInventoryItems = useMemo(() => allKitchenIngredients(inventory), [inventory]);
@@ -123,6 +124,7 @@ function ScopedSmoothieLab({ storageScope }) {
     } else setGeneratedRecipe(null);
     setVisualStatus("idle");
     setSaved(false);
+    setFeedbackStatus("");
   }, [storageScope, selectedGoals, size, profile.allergies, profile.avoidIngredients, profile.dietaryPattern, astraTransfer?.id]);
 
   useEffect(() => {
@@ -229,6 +231,7 @@ function ScopedSmoothieLab({ storageScope }) {
         keptIngredients: previewRecipe.ingredients.map((ingredient) => ingredient.name),
         replacements: ingredientReplacements,
         alternateIndex: variationIndex || 0,
+        learning: generationContext.learningProfile,
       });
       if (requestEpoch !== generationEpochRef.current) return;
       nextRecipe = mergeAiSmoothieProposal(result.data.recipe, fallbackRecipe);
@@ -289,6 +292,16 @@ function ScopedSmoothieLab({ storageScope }) {
     saveRecipeToLibrary(generatedRecipe, storageScope);
     recordSmoothieJourney(goal, generatedRecipe, storageScope);
     setSaved(true);
+  };
+  const recordRecipeFeedback = (sentiment) => {
+    if (!generatedRecipe) return;
+    recordWellnessFeedback(storageScope, "smoothie", {
+      sentiment, selection: generatedRecipe.name,
+      ingredients: generatedRecipe.ingredients.map((ingredient) => ingredient.name),
+    });
+    setFeedbackStatus(sentiment === "positive"
+      ? "Preference learned. Future formulas may favor this pattern when it remains safe and balanced."
+      : "Preference learned. Astra will avoid repeating this formula pattern; safety exclusions remain controlled in your profile.");
   };
 
   return <div className="cosmic-page-shell smoothie-cosmos"><GlowNav /><main className="ne-page smoothie-lab-page">
@@ -372,7 +385,7 @@ function ScopedSmoothieLab({ storageScope }) {
         <p className="ne-muted nutrition-note">Estimated for the full batch using standard ingredient averages. Check packaged-product labels; brands, scoop sizes, produce density, and substitutions change actual values.</p>
         <div className="ne-ingredient-list">{recipe.ingredients.map((ingredient, index) => <div key={`${ingredient.name}-${index}`}><span><small>{ingredient.group}</small>{ingredient.name}</span><strong>{formatIngredientMeasurement(ingredient.amount, ingredient.unit, measurementSystem)}</strong></div>)}</div>
         {recipe.substitutions.length > 0 && <p className="ne-muted">Substitutions: {recipe.substitutions.join("; ")}.</p>}
-        <button onClick={saveRecipe} disabled={!unlocked || !generatedRecipe} className="ne-primary save-formula">{!unlocked || !generatedRecipe ? <><LockKeyhole size={17} /> Generate an elixir to save</> : saved ? "Saved to your library" : "Save generated recipe"}</button>{saved && <Link className="ne-secondary inline-block ml-2" to="/saved">Open library</Link>}
+        <button onClick={saveRecipe} disabled={!unlocked || !generatedRecipe} className="ne-primary save-formula">{!unlocked || !generatedRecipe ? <><LockKeyhole size={17} /> Generate an elixir to save</> : saved ? "Saved to your library" : "Save generated recipe"}</button>{saved && <Link className="ne-secondary inline-block ml-2" to="/saved">Open library</Link>}{generatedRecipe && <div className="learning-feedback"><span>Help Astra learn from your experience:</span><button type="button" className="ne-secondary" onClick={() => recordRecipeFeedback("positive")}>Works for me</button><button type="button" className="ne-secondary" onClick={() => recordRecipeFeedback("negative")}>Not for me</button></div>}{feedbackStatus && <p className="learning-feedback-status" role="status">{feedbackStatus}</p>}
         <section className="blend-visualizer" style={blendVisualStyle} aria-label={`Visual preview of ${recipe.name}`}>
           <img className={`${visualStatus === "loading" ? "visual-loading" : ""} ingredient-matched`.trim()} src={recipe.visualUrl || ingredientVisualPreview} alt={recipe.visualUrl ? `AI-generated visual of ${recipe.name} based on its ingredients` : `Ingredient-derived preview of ${recipe.name}`} />
           <div className="blend-visualizer-shade" />

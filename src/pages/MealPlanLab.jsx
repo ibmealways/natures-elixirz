@@ -11,7 +11,7 @@ import { buildGroceryList, generateMealPlan } from "../utilities/mealPlanEngine"
 import { getKitchenInventory } from "../utilities/kitchenInventory";
 import { getMealKitchenInventory, getMealPlanningIngredients, saveMealKitchenInventory } from "../utilities/mealKitchenInventory";
 import { buildGenerationContext } from "../utilities/generationContext";
-import { buildKernelBrief, publishWellnessSignal } from "../utilities/wellnessExchange";
+import { buildKernelBrief, publishWellnessSignal, recordWellnessFeedback } from "../utilities/wellnessExchange";
 import { getSuggestedGoal, getWellnessJourney, recordMealJourney, VALID_GOALS } from "../utilities/wellnessJourney";
 import { formatQuantityText, getMeasurementSystem, saveMeasurementSystem } from "../utilities/measurements";
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
@@ -100,6 +100,7 @@ export default function MealPlanLab() {
   const yearlyPlanning = profile.subscriptionBillingMode === "yearly";
   const [generated, setGenerated] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState("");
   const [collageDay, setCollageDay] = useState(0);
   const [mealVisuals, setMealVisuals] = useState({});
   const [visualStatus, setVisualStatus] = useState({});
@@ -223,6 +224,7 @@ export default function MealPlanLab() {
         variationSeed,
         planningMonth,
         kitchenItems: generationContext.kitchenItems,
+        learning: generationContext.learningProfile,
         astraRequest: astraTransfer ? { title: astraTransfer.title, ingredients: astraTransfer.ingredients, notes: astraTransfer.notes } : null,
       });
       if (requestEpoch !== planEpochRef.current) return;
@@ -244,6 +246,7 @@ export default function MealPlanLab() {
     recordMealJourney(requestedNutritionGoal, requestedDays, nextPlan, storageScope);
     publishWellnessSignal(storageScope, "meals", { goal: requestedNutritionGoal, duration: requestedDays, selection: `${requestedDays}-day nourishment plan` });
     setSaved(false);
+    setFeedbackStatus("");
     generateVisuals(nextPlan[0], 0);
     window.setTimeout(() => document.querySelector("#meal-constellation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
@@ -324,7 +327,7 @@ export default function MealPlanLab() {
           {cell.isToday && journey.frequency?.hz && <span className="frequency-event"><Waves size={11} /> {journey.frequency.hz} Hz</span>}
         </article> : <i key={`blank-${index}`} />)}</div>
       </section>
-      <aside className="safety-garden"><ShieldCheck size={28} /><div><p className="ne-kicker">Safety checkpoint</p><h2>Personal needs come first</h2><p>Kidney disease, diabetes, food allergies, swallowing concerns, pregnancy, and prescribed diets require individualized professional guidance. Plans do not replace a registered dietitian.</p><button className="ne-secondary" disabled={!unlocked || !generated} onClick={() => { recordMealJourney(goal, days, generated, storageScope); setSaved(true); }}>{!unlocked && <LockKeyhole size={14} />} {saved ? "Plan connected to journey" : "Save plan and harvest list"}</button></div></aside>
+      <aside className="safety-garden"><ShieldCheck size={28} /><div><p className="ne-kicker">Safety checkpoint</p><h2>Personal needs come first</h2><p>Kidney disease, diabetes, food allergies, swallowing concerns, pregnancy, and prescribed diets require individualized professional guidance. Plans do not replace a registered dietitian.</p><button className="ne-secondary" disabled={!unlocked || !generated} onClick={() => { recordMealJourney(goal, days, generated, storageScope); setSaved(true); }}>{!unlocked && <LockKeyhole size={14} />} {saved ? "Plan connected to journey" : "Save plan and harvest list"}</button>{generated && <div className="learning-feedback"><span>Help Astra learn from this plan:</span><button type="button" className="ne-secondary" onClick={() => { recordWellnessFeedback(storageScope, "meals", { sentiment: "positive", selection: `${days}-day ${goal} plan`, ingredients: generated.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients.map((item) => item.name))) }); setFeedbackStatus("Preference learned. Future plans may favor this pattern when it remains safe and nutritionally appropriate."); }}>Works for me</button><button type="button" className="ne-secondary" onClick={() => { recordWellnessFeedback(storageScope, "meals", { sentiment: "negative", selection: `${days}-day ${goal} plan`, ingredients: generated.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients.map((item) => item.name))) }); setFeedbackStatus("Preference learned. Astra will avoid repeating this plan pattern; profile safety rules remain unchanged."); }}>Not for me</button></div>}{feedbackStatus && <p className="learning-feedback-status" role="status">{feedbackStatus}</p>}</div></aside>
     </section>
 
     <section className="daily-meal-collage" aria-labelledby="daily-collage-title">

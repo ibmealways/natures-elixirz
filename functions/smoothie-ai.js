@@ -94,6 +94,14 @@ export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes
       name: String(recipe?.name || "").slice(0, 80),
       ingredients: Array.isArray(recipe?.ingredients) ? recipe.ingredients.map((item) => String(item?.name || "")).filter(Boolean).slice(0, 12) : [],
     })),
+    learning: {
+      feedbackCount: Math.min(30, Math.max(0, Number(request.learning?.feedbackCount) || 0)),
+      likedSelections: textList(request.learning?.likedSelections).slice(0, 10),
+      dislikedSelections: textList(request.learning?.dislikedSelections).slice(0, 10),
+      preferredIngredients: textList(request.learning?.preferredIngredients).slice(0, 12),
+      cautionIngredients: textList(request.learning?.cautionIngredients).slice(0, 12),
+      source: request.learning?.source === "explicit-subscriber-feedback" ? "explicit-subscriber-feedback" : "none",
+    },
   };
   context.nutritionBrief = createNutritionBrief(context.profile, goals);
   return context;
@@ -107,6 +115,8 @@ Success means:
 - produce the requested finished batch size with realistic household quantities
 - use the selected intentions as nutrition goals, never as treatment claims
 - materially differ from recent recipes in both its main fruit/produce combination and overall ingredient set
+- use explicit subscriber feedback as a soft preference: do not repeat disliked selections, and favor preferred ingredients only when they fit the current goal and safety constraints
+- safety rules, dietary restrictions, pantry-only mode, nutrition balance, and variety always outrank learned preferences
 - keep subscriber-facing names, reasons, and descriptions natural; never mention prompts, validation, recent-recipe comparison, internal history, or prior attempts
 - explain why each ingredient belongs in this exact formula
 - only include reflux guidance when nutritionBrief.refluxScreeningEnabled is true; otherwise return an empty lower-trigger reflux object because the application will suppress it

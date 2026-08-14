@@ -2,7 +2,7 @@ import { getKitchenInventory } from "./kitchenInventory";
 import { getMealKitchenInventory } from "./mealKitchenInventory";
 import { getSavedRecipes } from "./recipeStorage";
 import { getTaiChiProgress, getWellnessJourney } from "./wellnessJourney";
-import { buildKernelBrief } from "./wellnessExchange";
+import { buildKernelBrief, buildLearningProfile, getWellnessExchange } from "./wellnessExchange";
 
 function summarizeRecipe(recipe = {}) {
   return {
@@ -18,6 +18,7 @@ function summarizeRecipe(recipe = {}) {
 export function buildAstraKernelContext(scope = "guest") {
   const journey = getWellnessJourney(scope);
   const kernelBrief = buildKernelBrief(scope, "astra");
+  const exchange = getWellnessExchange(scope);
   return {
     smoothieKitchen: getKitchenInventory(scope),
     mealPlanKitchen: getMealKitchenInventory(scope),
@@ -33,6 +34,10 @@ export function buildAstraKernelContext(scope = "guest") {
     kernelSignals: {
       signals: kernelBrief.signals,
       kernelMemory: kernelBrief.kernelMemory,
+      learningProfiles: {
+        smoothie: buildLearningProfile(exchange, "smoothie"),
+        meals: buildLearningProfile(exchange, "meals"),
+      },
       updatedAt: kernelBrief.updatedAt,
     },
   };

@@ -27,6 +27,7 @@ export function buildGenerationContext(profile = {}, inventory = {}, kernelBrief
     pantryText: kitchenItems.join(", "),
     crossKernelSignals: kernelBrief?.signals || {},
     kernelMemory: kernelBrief?.kernelMemory || null,
+    learningProfile: kernelBrief?.learningProfile || null,
     dataBoundaries: kernelBrief?.boundaries || null,
     reviewedAt: new Date().toISOString(),
   };
