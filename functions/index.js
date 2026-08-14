@@ -42,6 +42,7 @@ const youtubeDataApiSecret = defineSecret("YOUTUBE_DATA_API_KEY");
 const openaiModel = defineString("OPENAI_MODEL", { default: "gpt-5.6-terra" });
 const openaiImageModel = defineString("OPENAI_IMAGE_MODEL", { default: "gpt-image-2" });
 const enforceAppCheck = defineBoolean("ENFORCE_APP_CHECK", { default: false });
+const publicSignupMode = defineBoolean("PUBLIC_SIGNUP_MODE", { default: false });
 const VIP_FAMILY_OFFER_LIMIT = 5000;
 const VIP_FAMILY_SEAT_LIMIT = 2;
 
@@ -49,7 +50,7 @@ export const newAccountApprovalAlert = functionsV1.runWith({ failurePolicy: true
   const email = String(userRecord.email || "").trim().toLowerCase();
   if (!email) return;
   const requestRef = db.doc(`betaSignupRequests/${userRecord.uid}`);
-  const requestExists = (await requestRef.get()).exists;
+  const requestExists = publicSignupMode.value() ? true : (await requestRef.get()).exists;
   const createdAtIso = userRecord.metadata?.creationTime || new Date().toISOString();
   const batch = db.batch();
   if (!requestExists) {

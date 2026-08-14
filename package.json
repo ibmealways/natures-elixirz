@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:functions": "npm --prefix functions test",
     "verify": "npm test && npm run test:functions && npm run build",
+    "audit:launch": "node scripts/audit-launch-gates.cjs",
     "deploy:public": "npm run build && firebase deploy --only firestore,hosting",
     "deploy:functions": "firebase deploy --only functions"
   },
