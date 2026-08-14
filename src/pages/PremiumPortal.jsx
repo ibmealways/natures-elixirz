@@ -24,6 +24,7 @@ export default function PremiumPortal() {
   const [params] = useSearchParams();
   const [billingMode, setBillingMode] = useState("monthly");
   const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [checkoutTier, setCheckoutTier] = useState(null);
   const activeMembership = ["active", "trialing"].includes(profile.subscriptionStatus);
   const hasStripeBilling = profile.subscriptionAccessSource === "stripe";
 
@@ -65,7 +66,14 @@ export default function PremiumPortal() {
       await manageBilling();
       return;
     }
+    setCheckoutTier(tier.id);
     try {
+      await user.reload();
+      await user.getIdToken(true);
+      if (!user.emailVerified) {
+        setCheckoutMessage("Verify your email, then return here and try again. Nature's Elixirz will refresh your verification automatically.");
+        return;
+      }
       await startSubscriptionCheckout(tier.id, billingMode);
     } catch (error) {
       const code = String(error?.code || "");
@@ -78,6 +86,8 @@ export default function PremiumPortal() {
       } else {
         setCheckoutMessage(error?.message || "Checkout could not start. Please try again.");
       }
+    } finally {
+      setCheckoutTier(null);
     }
   };
 
@@ -137,7 +147,7 @@ export default function PremiumPortal() {
                 {tier.vip && <p className="tier-realm__founding">First 5,000 keep this founding rate while continuously active. Regular V.I.P. afterward: ${billingMode === "monthly" ? tier.monthly : tier.yearly}{billingMode === "monthly" ? "/month" : "/year"}. Household Circle is included for every V.I.P.</p>}
                 <div className="tier-realm__price">${tier.vip ? (billingMode === "monthly" ? tier.foundingMonthly : tier.foundingYearly) : (billingMode === "monthly" ? tier.monthly : tier.yearly)}<span>{tier.vip ? " founding rate" : ""}{billingMode === "monthly" ? " / month" : " / year"}</span></div>
                 <ul className="tier-realm__features">{tier.features.map((feature) => <li key={feature}><span>✦</span>{feature}</li>)}</ul>
-                <button onClick={() => chooseTier(tier)} className="tier-realm__button">{activeMembership && Number(profile.tier) === tier.id ? (hasStripeBilling ? "Manage Current Dimension" : "Current Dimension") : activeMembership && hasStripeBilling ? "Change in Billing Portal" : `Enter Dimension ${tier.id}`}</button>
+                <button type="button" disabled={checkoutTier !== null} onClick={() => chooseTier(tier)} className="tier-realm__button">{checkoutTier === tier.id ? "Opening secure checkoutâ€¦" : activeMembership && Number(profile.tier) === tier.id ? (hasStripeBilling ? "Manage Current Dimension" : "Current Dimension") : activeMembership && hasStripeBilling ? "Change in Billing Portal" : `Enter Dimension ${tier.id}`}</button>
               </div>
             </article>
           )})}
