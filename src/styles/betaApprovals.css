@@ -7,4 +7,5 @@
 .beta-approval-actions{display:flex;gap:.65rem;flex-shrink:0}
 .beta-approval-actions button,.beta-approvals .beta-roster-heading button{display:inline-flex;align-items:center;gap:.4rem}
 .beta-approval-message{color:#f8dc8c}
+.beta-refresh-control{display:grid;justify-items:end;gap:.3rem}.beta-refresh-control small{color:#87aaa2;font-size:.62rem}.beta-refresh-status{margin-top:.8rem;padding:.65rem .8rem;border:1px solid rgba(126,247,206,.16);border-radius:10px;color:#aaf5dd;background:rgba(11,88,72,.16);font-size:.72rem}.is-spinning{animation:beta-refresh-spin .8s linear infinite}@keyframes beta-refresh-spin{to{transform:rotate(360deg)}}
 @media(max-width:760px){.beta-approval-list article{align-items:flex-start;flex-direction:column}.beta-approval-actions{width:100%;flex-wrap:wrap}.beta-approval-actions button{flex:1 1 12rem}}
