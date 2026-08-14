@@ -6,7 +6,7 @@ Audit date: August 14, 2026
 
 **Controlled beta is operational. General paid launch is not yet authorized.**
 
-The application and production operations are healthy, but Stripe is still in test mode. Do not advertise or accept real paid subscriptions until the live billing checklist below is complete.
+The application and production operations are healthy, and Stripe live billing is configured and deployed. Do not advertise or accept public paid subscriptions until the controlled real-payment acceptance test and remaining launch checklist below are complete.
 
 Run the repeatable production gate with:
 
@@ -22,7 +22,7 @@ The command reports operational status and Stripe mode without displaying secret
 - Email/password authentication and email-enumeration protection are enabled.
 - Branded verification email is automatically queued when an account is created, with subscriber resend and bounded automatic retry.
 - `support@natureselixirz.com` SMTP is active; recent Gmail and domain delivery records are successful.
-- All ten Stripe monthly/yearly catalog slots are configured; checkout, billing portal, webhook, entitlement recovery, cancellation, and scheduled reconciliation functions are deployed.
+- All ten live Stripe monthly/yearly catalog slots are validated; checkout, billing portal, signed webhook, entitlement recovery, cancellation, and scheduled reconciliation functions are deployed with current live secret bindings.
 - Stripe reconciliation, Firestore backup validation, and autonomy monitoring last reported healthy.
 - Daily native Firestore backups are active with 14-day retention; the latest backup is READY.
 - A restore drill was validated against an isolated database without touching production.
@@ -34,7 +34,7 @@ The command reports operational status and Stripe mode without displaying secret
 
 ## Required before paid public launch
 
-1. **Activate Stripe live mode.** Create/confirm ten live recurring prices, install the live secret key, live price catalog, and live webhook signing secret, then redeploy the billing functions. Confirm the audit reports `stripe.mode: live` and `catalogComplete: true`.
+1. **Stripe live mode — completed August 14, 2026.** Ten recurring prices, the live API key, seven-event signed webhook, and production secret bindings are deployed. The launch audit reports `stripe.mode: live`, `catalogComplete: true`, and no binding mismatches.
 2. **Exercise real billing end to end.** With an owner-approved low-risk live transaction, verify checkout return, webhook entitlement, tier access, billing portal, cancellation-at-period-end, access expiry, refund/support procedure, ledger metrics, and reconciliation. Never test this with a real subscriber first.
 3. **Enable public signup mode.** Set `PUBLIC_SIGNUP_MODE=true` only after live billing passes. This stops new accounts from entering the beta-approval queue while preserving the existing beta roster.
 4. **Complete verification-email deliverability signoff.** Create fresh post-repair accounts at iCloud and Cox (or their successor mail domain), verify inbox/junk delivery and link completion, and retain only delivery metadata—not message contents or credentials.

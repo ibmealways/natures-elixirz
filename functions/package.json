@@ -16,6 +16,6 @@
     "firebase-functions": "^7.0.0",
     "google-auth-library": "^10.9.1",
     "openai": "^5.23.2",
-    "stripe": "^19.0.0"
+    "stripe": "^22.5.0"
   }
 }

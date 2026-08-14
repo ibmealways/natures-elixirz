@@ -63,10 +63,15 @@ The non-secret production parameters are already stored in
 In Stripe Workbench, register the deployed `stripeWebhook` HTTPS endpoint and subscribe to:
 
 - `checkout.session.completed`
+- `checkout.session.expired`
+- `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+- `customer.subscription.paused`
+- `customer.subscription.resumed`
 
 Copy that endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`. Test mode and live mode use different API keys, prices, and webhook secrets.
+The live endpoint uses snapshot payloads with Stripe API version `2026-04-22.dahlia`; keep the Stripe Node SDK on the Dahlia major family and verify signed deliveries after upgrades.
 
 ## 4. Astra Guide AI
 

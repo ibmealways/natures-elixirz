@@ -23,7 +23,7 @@ async function collection(path, pageSize = 500) {
 }
 
 async function main() {
-  const [stripe, backup, autonomy, incidents, mail, ledger, deployed, stripeKeySecret, stripePricesSecret] = await Promise.all([
+  const [stripe, backup, autonomy, incidents, mail, ledger, deployed, stripeKeySecret, stripePricesSecret, stripeWebhookSecret] = await Promise.all([
     document("systemOperations/stripeEntitlementReconciliation"),
     document("systemOperations/firestoreBackupValidation"),
     document("systemOperations/autonomyHealthMonitor"),
@@ -31,12 +31,27 @@ async function main() {
     functions.get(`/projects/${projectId}/locations/us-central1/functions?pageSize=200`),
     secrets.get(`/projects/${projectId}/secrets/STRIPE_SECRET_KEY/versions/latest:access`),
     secrets.get(`/projects/${projectId}/secrets/STRIPE_PRICES/versions/latest:access`),
+    secrets.get(`/projects/${projectId}/secrets/STRIPE_WEBHOOK_SECRET/versions/latest:access`),
   ]);
   const operation = (value) => { const data = fields(value); return { status: data.status, completedAt: data.completedAt, inspected: data.inspected, repaired: data.repaired, missing: data.missing, reason: data.reason }; };
   const statusCounts = ledger.reduce((counts, item) => { const status = String(fields(item).status || "unknown"); counts[status] = (counts[status] || 0) + 1; return counts; }, {});
   const unresolvedIncidents = incidents.filter((item) => fields(item).status === "open").length;
+  const openIncidentSummaries = incidents
+    .filter((item) => fields(item).status === "open")
+    .map((item) => {
+      const data = fields(item);
+      return {
+        id: item.name.split("/").at(-1),
+        service: data.service,
+        errorCode: data.errorCode,
+        errorMessage: data.errorMessage,
+        firstObservedAt: data.firstObservedAt,
+        lastObservedAt: data.lastObservedAt,
+      };
+    });
   const interventionMail = mail.filter((item) => fields(item).category === "operations-autonomy-alert" && fields(item).deliveryState === "ERROR").length;
-  const deployedNames = (deployed.body.functions || []).map((item) => item.name.split("/").at(-1));
+  const deployedFunctions = deployed.body.functions || [];
+  const deployedNames = deployedFunctions.map((item) => item.name.split("/").at(-1));
   const requiredFunctions = ["createCheckoutSession", "createBillingPortalSession", "stripeWebhook", "reconcileStripeEntitlements", "validateFirestoreBackupReadiness", "monitorAutonomyHealth", "exportSubscriberData", "deleteSubscriberAccount", "requestVerificationEmail"];
   const missingFunctions = requiredFunctions.filter((name) => !deployedNames.includes(name));
   const decodeSecret = (response) => Buffer.from(response.body.payload.data, "base64").toString("utf8");
@@ -45,14 +60,37 @@ async function main() {
   const expectedPriceKeys = Array.from({ length: 5 }, (_, index) => index + 1).flatMap((tier) => [`STRIPE_PRICE_TIER_${tier}_MONTHLY`, `STRIPE_PRICE_TIER_${tier}_YEARLY`]);
   const stripeMode = stripeKey.startsWith("sk_live_") ? "live" : stripeKey.startsWith("sk_test_") ? "test" : "unknown";
   const configuredPriceCount = expectedPriceKeys.filter((key) => String(prices[key] || "").startsWith("price_")).length;
+  const latestSecretVersions = {
+    STRIPE_SECRET_KEY: stripeKeySecret.body.name.split("/").at(-1),
+    STRIPE_PRICES: stripePricesSecret.body.name.split("/").at(-1),
+    STRIPE_WEBHOOK_SECRET: stripeWebhookSecret.body.name.split("/").at(-1),
+  };
+  const expectedBindings = {
+    createCheckoutSession: ["STRIPE_SECRET_KEY", "STRIPE_PRICES"],
+    createBillingPortalSession: ["STRIPE_SECRET_KEY"],
+    deleteSubscriberAccount: ["STRIPE_SECRET_KEY"],
+    reconcileStripeEntitlements: ["STRIPE_SECRET_KEY", "STRIPE_PRICES"],
+    recoverSubscriptionEntitlement: ["STRIPE_SECRET_KEY", "STRIPE_PRICES"],
+    stripeWebhook: ["STRIPE_SECRET_KEY", "STRIPE_PRICES", "STRIPE_WEBHOOK_SECRET"],
+  };
+  const bindingMismatches = [];
+  for (const [functionName, secretNames] of Object.entries(expectedBindings)) {
+    const deployedFunction = deployedFunctions.find((item) => item.name.endsWith(`/functions/${functionName}`));
+    const bindings = Object.fromEntries((deployedFunction?.serviceConfig?.secretEnvironmentVariables || []).map((item) => [item.key, item.version]));
+    for (const secretName of secretNames) {
+      if (bindings[secretName] !== latestSecretVersions[secretName]) {
+        bindingMismatches.push({ functionName, secretName, deployedVersion: bindings[secretName] || null, latestVersion: latestSecretVersions[secretName] });
+      }
+    }
+  }
   const report = {
     auditedAt: new Date().toISOString(),
     operations: { stripeEntitlementReconciliation: operation(stripe), firestoreBackupValidation: operation(backup), autonomyHealthMonitor: operation(autonomy) },
-    unresolvedIncidents, interventionMail, subscriptionLedgerStatusCounts: statusCounts,
+    unresolvedIncidents, openIncidentSummaries, interventionMail, subscriptionLedgerStatusCounts: statusCounts,
     deployedFunctionCount: deployedNames.length, missingRequiredFunctions: missingFunctions,
-    stripe: { mode: stripeMode, configuredPriceCount, expectedPriceCount: expectedPriceKeys.length, catalogComplete: configuredPriceCount === expectedPriceKeys.length },
+    stripe: { mode: stripeMode, configuredPriceCount, expectedPriceCount: expectedPriceKeys.length, catalogComplete: configuredPriceCount === expectedPriceKeys.length, bindingMismatches },
   };
-  report.launchGate = missingFunctions.length || unresolvedIncidents || interventionMail || stripeMode !== "live" || configuredPriceCount !== expectedPriceKeys.length || Object.values(report.operations).some((item) => !["healthy", "completed"].includes(String(item.status))) ? "attention-required" : "operationally-healthy";
+  report.launchGate = missingFunctions.length || unresolvedIncidents || interventionMail || stripeMode !== "live" || configuredPriceCount !== expectedPriceKeys.length || bindingMismatches.length || Object.values(report.operations).some((item) => !["healthy", "completed"].includes(String(item.status))) ? "attention-required" : "operationally-healthy";
   process.stdout.write(JSON.stringify(report, null, 2));
 }
 

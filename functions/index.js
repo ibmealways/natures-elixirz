@@ -18,7 +18,7 @@ import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summar
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
-import { backupReadiness, shouldReconcileLedger, summarizeAutonomyHealth } from "./operations-autonomy.js";
+import { backupReadiness, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   astraReplySchema,
@@ -824,8 +824,10 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
       validationFeedback = `The prior proposal failed application validation: ${String(error.message || "invalid recipe").slice(0, 240)}. Create a different corrected recipe.`;
       if (attempt === 1) {
         logger.error("ai.smoothie_recipe.failed", { uid, status: error?.status, code: error?.code, message: error?.message });
-        try { await recordAiServiceIncident("smartSmoothie", uid, error, { attempts: 2 }); }
-        catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartSmoothie", message: incidentError?.message }); }
+        if (shouldRecordAiServiceIncident(error)) {
+          try { await recordAiServiceIncident("smartSmoothie", uid, error, { attempts: 2 }); }
+          catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartSmoothie", message: incidentError?.message }); }
+        }
         throw new HttpsError("unavailable", "AI smoothie generation could not produce a validated recipe. A clearly labeled fallback can still be used.");
       }
     }
@@ -866,8 +868,10 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
       feedback = `The prior plan failed application validation: ${String(error.message || "invalid plan").slice(0, 300)}. Produce a different corrected plan.`;
       if (attempt === 1) {
         logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message });
-        try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 2, days: context.days }); }
-        catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
+        if (shouldRecordAiServiceIncident(error)) {
+          try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 2, days: context.days }); }
+          catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
+        }
         throw new HttpsError("unavailable", "AI meal planning could not produce a validated plan. A clearly labeled rules-based backup can still be shown.");
       }
     }

@@ -1,12 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessOperationHealth, backupReadiness, newestReadyBackup, shouldReconcileLedger, summarizeAutonomyHealth } from "./operations-autonomy.js";
+import { assessOperationHealth, backupReadiness, newestReadyBackup, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
 
 test("Stripe reconciliation includes recoverable subscription states only", () => {
   assert.equal(shouldReconcileLedger({ id: "sub_1", uid: "user-1", status: "active" }), true);
   assert.equal(shouldReconcileLedger({ id: "sub_2", uid: "user-2", status: "past_due" }), true);
   assert.equal(shouldReconcileLedger({ id: "sub_3", uid: "user-3", status: "canceled" }), false);
   assert.equal(shouldReconcileLedger({ id: "sub_4", status: "active" }), false);
+});
+
+test("AI incident classification excludes recipe validation and records service failures", () => {
+  assert.equal(shouldRecordAiServiceIncident(new Error("The AI recipe was too similar to a recent recipe.")), false);
+  assert.equal(shouldRecordAiServiceIncident({ status: 429, code: "rate_limit_exceeded" }), true);
+  assert.equal(shouldRecordAiServiceIncident({ name: "APIConnectionError" }), true);
 });
 
 test("backup readiness selects the newest ready production backup", () => {

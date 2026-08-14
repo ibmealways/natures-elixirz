@@ -6,6 +6,16 @@ export function shouldReconcileLedger(record = {}) {
   return Boolean(record.uid && record.id && RECONCILABLE_STRIPE_STATUSES.has(String(record.status || "")));
 }
 
+export function shouldRecordAiServiceIncident(error = {}) {
+  const name = String(error.name || "");
+  return Boolean(
+    Number.isInteger(error.status) ||
+    error.code ||
+    error.type ||
+    /^(API|RateLimit|Authentication|PermissionDenied|InternalServer)/.test(name)
+  );
+}
+
 export function newestReadyBackup(backups = [], databaseName) {
   return backups
     .filter((backup) => backup.state === "READY" && backup.database === databaseName && backup.snapshotTime)
