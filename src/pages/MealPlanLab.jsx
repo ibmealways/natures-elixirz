@@ -18,6 +18,7 @@ import { getSuggestedGoal, getWellnessJourney, recordMealJourney, VALID_GOALS } 
 import { formatQuantityText, getMeasurementSystem, saveMeasurementSystem } from "../utilities/measurements";
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import { getKernelSession, saveKernelSession } from "../utilities/kernelSessionStorage";
+import { assessClientNutritionRisk } from "../utilities/nutritionRiskScreen";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/mealPlanStudio.css";
@@ -96,6 +97,7 @@ export default function MealPlanLab() {
   const [inventoryDrafts, setInventoryDrafts] = useState({ pantry: "", fridge: "", freezer: "" });
   const mealKitchenItems = useMemo(() => getMealPlanningIngredients(storageScope), [storageScope, smoothieInventory, mealInventory]);
   const generationContext = useMemo(() => buildGenerationContext(profile, { pantry: mealKitchenItems, fridge: [], freezer: [] }, buildKernelBrief(storageScope, "meals")), [profile, mealKitchenItems, storageScope]);
+  const nutritionRisk = useMemo(() => assessClientNutritionRisk(profile), [profile]);
   const unlocked = useTierAccess(3);
   const requestedGoal = params.get("goal");
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
@@ -118,6 +120,12 @@ export default function MealPlanLab() {
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
   const autoHandoffStartedRef = useRef(false);
+  useEffect(() => {
+    if (!nutritionRisk.generationLimited) return;
+    setGenerated(null);
+    setGenerationStatus("blocked");
+    setGenerationMessage(nutritionRisk.message);
+  }, [nutritionRisk.generationLimited, nutritionRisk.message]);
   useEffect(() => {
     saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "" });
   }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence]);
@@ -202,6 +210,12 @@ export default function MealPlanLab() {
 
   async function generate(variationSeed = 0, requestedNutritionGoal = goal, requestedDays = days) {
     if (!unlocked || !isOnboarded) return;
+    if (nutritionRisk.generationLimited) {
+      setGenerated(null);
+      setGenerationStatus("blocked");
+      setGenerationMessage(nutritionRisk.message);
+      return;
+    }
     const requestEpoch = planEpochRef.current + 1;
     planEpochRef.current = requestEpoch;
     resetPlanVisuals();
@@ -318,6 +332,7 @@ export default function MealPlanLab() {
       </section>
       <NutritionFactsRegistry scope={storageScope} pantryItems={mealKitchenItems} activeIngredients={generated?.flatMap((day) => day.meals?.flatMap((meal) => meal.ingredients || []) || []) || []} activeFormulaName={generated ? `${days}-day meal plan` : ""} />
       <div className="ne-alert"><strong>Pre-generation inventory review:</strong> {isOnboarded ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total items from Pantry, Fridge, Freezer, and Smoothie pantry will be reviewed.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
+      {nutritionRisk.flags.length > 0 && <div className="ne-alert ne-alert-danger"><strong>{nutritionRisk.generationLimited ? "Clinician-target safety gate" : "Additional nutrition review"}:</strong> {nutritionRisk.message} {nutritionRisk.generationLimited ? "A rules-based backup will not bypass this protection if AI is unavailable." : "Saved restrictions remain mandatory; confirm individual targets with the appropriate clinician or pharmacist."}</div>}
       <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded} onClick={() => generate(0)}>{!unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
       {generationMessage && <div className={`ne-alert ${["fallback", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : "Rules-based backup"}:</strong> {generationMessage}</div>}
       {medicationSafety && <div className={`ne-alert ${medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {medicationSafety.status}:</strong> {medicationSafety.note}{medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {medicationSafety.foodsAvoided.join(", ")}.</>} This screening cannot replace the medication label, pharmacist, or prescriber.</div>}

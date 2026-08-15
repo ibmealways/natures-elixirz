@@ -21,6 +21,7 @@ import { buildSmoothieVisualPreview } from "../utilities/smoothieVisualPreview";
 import { mergeAiSmoothieProposal } from "../utilities/aiSmoothie";
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import { getKernelSession, saveKernelSession } from "../utilities/kernelSessionStorage";
+import { assessClientNutritionRisk } from "../utilities/nutritionRiskScreen";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/smoothieBuilder.css";
@@ -107,6 +108,13 @@ function ScopedSmoothieLab({ storageScope }) {
   const pantryText = inventory[kitchenZone].join(", ");
   const allInventoryItems = useMemo(() => allKitchenIngredients(inventory), [inventory]);
   const generationContext = useMemo(() => buildGenerationContext(profile, inventory, exchangeBrief), [profile, inventory, exchangeBrief]);
+  const nutritionRisk = useMemo(() => assessClientNutritionRisk(profile), [profile]);
+  useEffect(() => {
+    if (!nutritionRisk.generationLimited) return;
+    setGeneratedRecipe(null);
+    setGenerationStatus("blocked");
+    setGenerationMessage(nutritionRisk.message);
+  }, [nutritionRisk.generationLimited, nutritionRisk.message]);
 
   useEffect(() => {
     const preference = getSmoothiePreference(storageScope, selectedGoals);
@@ -225,6 +233,12 @@ function ScopedSmoothieLab({ storageScope }) {
     : [...current, value]);
   const generate = async (variationIndex = alternateIndex) => {
     if (!unlocked || !generationContext.profileReady) return;
+    if (nutritionRisk.generationLimited) {
+      setGeneratedRecipe(null);
+      setGenerationStatus("blocked");
+      setGenerationMessage(nutritionRisk.message);
+      return;
+    }
     const requestEpoch = generationEpochRef.current + 1;
     generationEpochRef.current = requestEpoch;
     const fallbackRecipe = generatePersonalizedSmoothie(workingProfile, selectedGoals, size, { selectedNames, ingredientReplacements, pantryText: useOnlyPantry ? allInventoryItems.join(", ") : "", useOnlyPantry, customName, variationIndex });
@@ -379,6 +393,7 @@ function ScopedSmoothieLab({ storageScope }) {
           })}</div>}
         </div>}
       <div className="ne-alert"><strong>Pre-generation review:</strong> {generationContext.profileReady ? useOnlyPantry ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} kitchen ingredients will be reviewed.` : `${generationContext.reviewedProfileFields.length} profile areas will be reviewed. Pantry-only mode is off.` : "Complete your personal profile before Astra can generate a subscriber-specific formula."}</div>
+      {nutritionRisk.flags.length > 0 && <div className="ne-alert ne-alert-danger"><strong>{nutritionRisk.generationLimited ? "Clinician-target safety gate" : "Additional nutrition review"}:</strong> {nutritionRisk.message} {nutritionRisk.generationLimited ? "A rules-based fallback will not bypass this protection if AI is unavailable." : "Saved restrictions remain mandatory; confirm individual targets with the appropriate clinician or pharmacist."}</div>}
       <div className="generation-actions"><button className="ne-primary generate-elixir" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading" || generationStatus === "limit"} onClick={() => generate()}>{generationStatus === "loading" ? <><Sparkles size={19} /> Astra is analyzing and formulating…</> : !unlocked ? <><LockKeyhole size={18} /> Subscribe to generate this elixir</> : !generationContext.profileReady ? <><LockKeyhole size={18} /> Complete profile to generate</> : useOnlyPantry ? <><Sparkles size={19} /> Review profile + pantry and generate</> : <><Sparkles size={19} /> Review profile + generate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !generationContext.profileReady || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Alternate ingredients changes the preview only. Active beta testers have no daily smoothie-generation cap during testing.</small></div>
     </section>
 
