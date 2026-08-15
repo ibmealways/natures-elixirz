@@ -856,27 +856,30 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   await consumeMealPlanGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   let feedback = "Generate the requested meal plan now.";
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const validationFailures = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await client.responses.create({
         model: openaiModel.value(),
         instructions: buildMealPlanInstructions(context),
         input: feedback,
-        reasoning: { effort: "medium" },
+        reasoning: { effort: "low" },
         text: { verbosity: "medium", format: { type: "json_schema", name: "personalized_meal_plan", strict: true, schema: mealPlanSchema } },
         safety_identifier: createHash("sha256").update(uid).digest("hex"),
-        max_output_tokens: context.days > 3 ? 10000 : 6000,
+        max_output_tokens: context.days > 3 ? 12000 : 9000,
       });
       const plan = validateMealPlanProposal(JSON.parse(response.output_text), context);
       await db.collection(`users/${uid}/mealPlanAiHistory`).add({ goal: context.goal, days: context.days, summary: response.output_text.slice(0, 500), createdAt: FieldValue.serverTimestamp() });
       logger.info("ai.meal_plan.generated", { uid, goal: context.goal, days: context.days, attempt: attempt + 1 });
       return { plan, nutritionIntelligence: summarizeMealPlanIntelligence(plan, context), medicationSafety: JSON.parse(response.output_text).medicationSafety, source: "openai", model: response.model || openaiModel.value() };
     } catch (error) {
-      feedback = `The prior plan failed application validation: ${String(error.message || "invalid plan").slice(0, 300)}. Produce a different corrected plan.`;
-      if (attempt === 1) {
-        logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message });
+      const failureReason = String(error.message || "invalid plan").slice(0, 300);
+      validationFailures.push(failureReason);
+      feedback = `The prior plan failed application validation: ${failureReason}. Produce a different corrected plan. Follow every quantity format, meal order, culinary-coherence, and goal-fit requirement exactly.`;
+      if (attempt === 2) {
+        logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message, validationFailures });
         if (shouldRecordAiServiceIncident(error)) {
-          try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 2, days: context.days }); }
+          try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 3, days: context.days, validationFailures }); }
           catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
         }
         throw new HttpsError("unavailable", "AI meal planning could not produce a validated plan. A clearly labeled rules-based backup can still be shown.");

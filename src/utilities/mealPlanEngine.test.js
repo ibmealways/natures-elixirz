@@ -87,10 +87,20 @@ describe("generateMealPlan", () => {
     })[0].meals.find((meal) => meal.meal === "Breakfast");
     if (/chicken/i.test(breakfast.food) && /waffle/i.test(breakfast.food)) {
       expect(breakfast.ingredients.map((item) => item.name).join(" ")).not.toMatch(/peanut butter/i);
+      expect(breakfast.ingredients.map((item) => item.name).join(" ")).not.toMatch(/nut butter/i);
       expect(breakfast.instructions.join(" ")).toMatch(/chicken|poultry/i);
       expect(breakfast.instructions.join(" ")).toMatch(/waffle/i);
       expect(breakfast.instructions.join(" ")).not.toMatch(/gather the ingredients/i);
     }
+  });
+
+  it("uses a spoon-sized portion for a nut-butter goal accent", () => {
+    const plan = generateMealPlan({}, "healthyWeight", 1, {
+      kitchenItems: ["Greek yogurt", "Oats", "Banana"],
+    });
+    const accent = plan[0].meals.flatMap((meal) => meal.ingredients)
+      .find((item) => /nut butter/i.test(item.name));
+    if (accent) expect(accent.quantity).toBe("1 tbsp");
   });
 
   it("substitutes animal foods for vegan profiles", () => {

@@ -207,6 +207,17 @@ function pantryQuantity(item, fallback = "1 cup") {
   return fallback;
 }
 
+function goalAccentQuantity(name = "") {
+  const normalized = String(name).toLowerCase();
+  if (/nut butter|peanut butter|almond butter|seed butter/.test(normalized)) return "1 tbsp";
+  if (/seed/.test(normalized)) return "2 tbsp";
+  if (/oil/.test(normalized)) return "1 tbsp";
+  if (/spice|cinnamon|turmeric|ginger/.test(normalized)) return "1/2 tsp";
+  if (/chicken|turkey|beef|fish|salmon|tuna|tofu|tempeh/.test(normalized)) return "4 oz";
+  if (/egg/.test(normalized)) return "2 count";
+  return "1 cup";
+}
+
 function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed) {
   const available = recognized.filter((item) => pantryEligible(item, profile));
   const offset = dayIndex * 3 + occasionIndex + variationSeed;
@@ -229,7 +240,8 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const unique = [...new Map(chosen.filter(Boolean).map((item) => [item.name.toLowerCase(), item])).values()];
   const hasGoalAccent = unique.some((item) => item.name.toLowerCase().includes(targetAccent.toLowerCase()) || targetAccent.toLowerCase().includes(item.name.toLowerCase()));
   const ingredients = unique.map((item) => ({ quantity: pantryQuantity(item), name: item.name, availability: "on-hand" }));
-  if (!hasGoalAccent) ingredients.push({ quantity: "1 cup", name: targetAccent, availability: "needed" });
+  const incompatibleWaffleAccent = isWaffleBreakfast && isSavoryProtein && /nut butter|seed butter/i.test(targetAccent);
+  if (!hasGoalAccent && !incompatibleWaffleAccent) ingredients.push({ quantity: goalAccentQuantity(targetAccent), name: targetAccent, availability: "needed" });
   const names = ingredients.map((item) => item.name);
   const food = moment === "Breakfast"
     ? `${names.slice(0, 2).join(" and ")} breakfast with ${names.slice(2).join(" and ")}`
