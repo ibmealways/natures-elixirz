@@ -102,7 +102,14 @@ function Shell() {
     () => new Set(activeKernel ? [activeKernel.id] : []),
   );
   const [kernelRevisions, setKernelRevisions] = useState({});
+  const [cloudHydrationRevision, setCloudHydrationRevision] = useState(0);
   const previousAccountKey = useRef(accountKey);
+
+  useEffect(() => {
+    const showRestoredAccountData = () => setCloudHydrationRevision((current) => current + 1);
+    window.addEventListener("naturesElixirz:data-ready", showRestoredAccountData, { once: true });
+    return () => window.removeEventListener("naturesElixirz:data-ready", showRestoredAccountData);
+  }, [accountKey]);
 
   useEffect(() => {
     if (previousAccountKey.current === accountKey) return;
@@ -173,7 +180,7 @@ function Shell() {
             const isActive = activeKernel?.id === kernel.id;
             return (
               <section
-                key={`${accountKey}:${kernel.id}:${kernelRevisions[kernel.id] || 0}`}
+                key={`${accountKey}:${kernel.id}:${cloudHydrationRevision}:${kernelRevisions[kernel.id] || 0}`}
                 hidden={!isActive}
                 aria-hidden={!isActive}
                 className="kernel-workspace"
