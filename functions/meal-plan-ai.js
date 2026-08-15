@@ -65,6 +65,19 @@ export const mealPlanSchema = {
 const cleanList = (items, limit = 160) => [...new Set((Array.isArray(items) ? items : [])
   .map((item) => String(item || "").trim()).filter(Boolean))].slice(0, limit);
 
+const EIGHTH_FRACTIONS = ["", "1/8", "1/4", "3/8", "1/2", "5/8", "3/4", "7/8"];
+export function formatTierOneQuantity(item = {}) {
+  if (typeof item === "string") return "quantity saved in Tier 1";
+  const amount = Number(item?.amount);
+  const unit = String(item?.unit || "").trim();
+  if (!Number.isFinite(amount) || amount <= 0) return String(item?.quantity || "quantity saved in Tier 1").trim();
+  const eighths = Math.round(amount * 8);
+  if (Math.abs(amount - (eighths / 8)) > 0.011) return `${amount} ${unit}`.trim();
+  const whole = Math.floor(eighths / 8);
+  const fraction = EIGHTH_FRACTIONS[eighths % 8];
+  return `${whole || ""}${whole && fraction ? " " : ""}${fraction} ${unit}`.trim();
+}
+
 export function buildMealPlanContext(profile = {}, request = {}) {
   const requestedDays = Math.min(7, Math.max(1, Number(request.days) || 1));
   const rawCrossTier = request.crossTierContext && typeof request.crossTierContext === "object"
@@ -93,7 +106,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       selectedGoals: cleanList(rawSmoothie.selectedGoals, 12),
       ingredients: (rawSmoothie.ingredients || []).slice(0, 24).map((item) => ({
         name: String(typeof item === "string" ? item : item?.name || "").trim().slice(0, 120),
-        quantity: String(typeof item === "string" ? "quantity saved in Tier 1" : `${item?.amount ?? ""} ${item?.unit || ""}`.trim() || item?.quantity || "quantity saved in Tier 1").slice(0, 40),
+        quantity: formatTierOneQuantity(item).slice(0, 40),
       })).filter((item) => item.name),
       nutrition: rawSmoothie.nutrition && typeof rawSmoothie.nutrition === "object"
         ? {
