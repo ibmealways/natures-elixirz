@@ -352,7 +352,7 @@ function ScopedSmoothieLab({ storageScope }) {
         </div>
         </div>}
       </div>
-      <NutritionFactsRegistry scope={storageScope} pantryItems={allInventoryItems} />
+      <NutritionFactsRegistry scope={storageScope} pantryItems={allInventoryItems} activeIngredients={generatedRecipe?.ingredients || []} activeFormulaName={generatedRecipe?.name || ""} />
       {useOnlyPantry
         ? <div className="ne-alert"><strong>Pantry-only is active.</strong> Astra will use only recognized ingredients from the pantry box above; preset recipe ingredients are excluded.</div>
         : <div className="astra-ingredient-preview">
