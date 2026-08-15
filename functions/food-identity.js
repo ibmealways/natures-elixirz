@@ -46,6 +46,7 @@ const canonicalUnit = (value) => {
   if (["cup", "cups"].includes(unit)) return "cup";
   if (["tbsp", "tablespoon", "tablespoons"].includes(unit)) return "tbsp";
   if (["tsp", "teaspoon", "teaspoons"].includes(unit)) return "tsp";
+  if (["pinch", "pinches"].includes(unit)) return "pinch";
   if (["egg", "eggs", "large", "each", "item", "items"].includes(unit)) return "each";
   if (["count", "counts"].includes(unit)) return "count";
   if (["piece", "pieces"].includes(unit)) return "piece";

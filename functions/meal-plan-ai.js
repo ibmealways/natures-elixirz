@@ -167,7 +167,7 @@ Requirements:
 - Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
 - Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner. Avoid repeating the same dish or dominant ingredients across days.
-- Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, oz, piece, or count. Do not use decimals.
+- Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, pinch, oz, piece, or count. Do not use decimals.
 - For a linked branded product, use its exact linked ingredient name and a compatible label serving unit. Package values are subscriber-entered and schema-validated, not independently laboratory-verified.
 - Smoothies require blending instructions. Cooked meals need concise, food-safe instructions. Include ordinary culinary herbs or spices where appropriate; do not prescribe supplements or medicinal doses.
 - Never select foods to amplify, boost, complement, or counteract a medication's pharmacologic effect.

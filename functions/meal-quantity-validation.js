@@ -1,7 +1,7 @@
 import { parseHouseholdQuantity } from "./food-identity.js";
 
-const LIMITS = Object.freeze({ g: 700, oz: 16, cup: 4, tbsp: 8, tsp: 12, each: 8, count: 8, piece: 6, slice: 6, can: 2, scoop: 2 });
-const UNIT_ALIASES = Object.freeze({ counts: "count", pieces: "piece", slices: "slice", cans: "can", scoops: "scoop" });
+const LIMITS = Object.freeze({ g: 700, oz: 16, cup: 4, tbsp: 8, tsp: 12, pinch: 6, each: 8, count: 8, piece: 6, slice: 6, can: 2, scoop: 2 });
+const UNIT_ALIASES = Object.freeze({ counts: "count", pieces: "piece", slices: "slice", cans: "can", scoops: "scoop", pinches: "pinch" });
 
 export function validateMealIngredientQuantity(ingredient = {}) {
   const raw = String(ingredient.quantity || "").trim();

@@ -6,6 +6,7 @@ describe("meal quantity validation", () => {
   it("parses familiar fractions and count units", () => {
     assert.equal(validateMealIngredientQuantity({ name: "rice", quantity: "3/4 cup" }).amount, 0.75);
     assert.equal(validateMealIngredientQuantity({ name: "eggs", quantity: "2 count" }).unit, "count");
+    assert.equal(validateMealIngredientQuantity({ name: "black pepper", quantity: "1 pinch" }).unit, "pinch");
   });
 
   it("rejects ambiguous, decimal, unknown, and excessive quantities", () => {
