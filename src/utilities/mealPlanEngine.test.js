@@ -81,6 +81,18 @@ describe("generateMealPlan", () => {
     expect(plan[0].meals.some((meal) => meal.pantryMatch)).toBe(true);
   });
 
+  it("keeps a pantry-built chicken and waffles breakfast coherent and recipe-specific", () => {
+    const breakfast = generateMealPlan({}, "healthyweight", 1, {
+      kitchenItems: ["Chicken thighs", "Waffles", "Apple", "Peanut butter", "Spinach"],
+    })[0].meals.find((meal) => meal.meal === "Breakfast");
+    if (/chicken/i.test(breakfast.food) && /waffle/i.test(breakfast.food)) {
+      expect(breakfast.ingredients.map((item) => item.name).join(" ")).not.toMatch(/peanut butter/i);
+      expect(breakfast.instructions.join(" ")).toMatch(/chicken|poultry/i);
+      expect(breakfast.instructions.join(" ")).toMatch(/waffle/i);
+      expect(breakfast.instructions.join(" ")).not.toMatch(/gather the ingredients/i);
+    }
+  });
+
   it("substitutes animal foods for vegan profiles", () => {
     const plan = generateMealPlan({ dietaryPattern: "vegan" }, "heart", 1);
     expect(plan[0].meals.some((meal) => meal.food.includes("salmon"))).toBe(false);

@@ -17,6 +17,7 @@ import { buildKernelBrief, publishWellnessSignal, recordWellnessFeedback } from 
 import { getSuggestedGoal, getWellnessJourney, recordMealJourney, VALID_GOALS } from "../utilities/wellnessJourney";
 import { formatQuantityText, getMeasurementSystem, saveMeasurementSystem } from "../utilities/measurements";
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
+import { getKernelSession, saveKernelSession } from "../utilities/kernelSessionStorage";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/mealPlanStudio.css";
@@ -78,6 +79,7 @@ export default function MealPlanLab() {
   const { user } = useAuth();
   const { profile, isOnboarded } = useSubscriber();
   const storageScope = user?.uid || "guest";
+  const restoredSession = useMemo(() => getKernelSession(storageScope, "meals"), [storageScope]);
   const astraTransfer = handoffSource === "astra" ? getAstraKernelTransfer(storageScope, "meal_plan") : null;
   const smoothieInventory = useMemo(() => getKitchenInventory(storageScope), [storageScope]);
   const [mealInventory, setMealInventory] = useState(() => getMealKitchenInventory(storageScope));
@@ -97,25 +99,28 @@ export default function MealPlanLab() {
   const unlocked = useTierAccess(3);
   const requestedGoal = params.get("goal");
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
-  const [goal, setGoal] = useState(VALID_GOALS.includes(astraTransfer?.goal) ? astraTransfer.goal : VALID_GOALS.includes(requestedGoal) ? requestedGoal : rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
-  const [days, setDays] = useState(astraTransfer?.days || 1);
-  const [planningMonth, setPlanningMonth] = useState(1);
+  const [goal, setGoal] = useState(VALID_GOALS.includes(astraTransfer?.goal) ? astraTransfer.goal : VALID_GOALS.includes(requestedGoal) ? requestedGoal : restoredSession?.goal || rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
+  const [days, setDays] = useState(astraTransfer?.days || restoredSession?.days || 1);
+  const [planningMonth, setPlanningMonth] = useState(restoredSession?.planningMonth || 1);
   const yearlyPlanning = profile.subscriptionBillingMode === "yearly";
-  const [generated, setGenerated] = useState(null);
+  const [generated, setGenerated] = useState(restoredSession?.generated || null);
   const [saved, setSaved] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
   const [collageDay, setCollageDay] = useState(0);
   const [mealVisuals, setMealVisuals] = useState({});
   const [visualStatus, setVisualStatus] = useState({});
   const [alternateIndex, setAlternateIndex] = useState(0);
-  const [generationStatus, setGenerationStatus] = useState("idle");
-  const [generationMessage, setGenerationMessage] = useState("");
-  const [medicationSafety, setMedicationSafety] = useState(null);
-  const [nutritionIntelligence, setNutritionIntelligence] = useState(null);
+  const [generationStatus, setGenerationStatus] = useState(restoredSession?.generationStatus || "idle");
+  const [generationMessage, setGenerationMessage] = useState(restoredSession?.generationMessage || "");
+  const [medicationSafety, setMedicationSafety] = useState(restoredSession?.medicationSafety || null);
+  const [nutritionIntelligence, setNutritionIntelligence] = useState(restoredSession?.nutritionIntelligence || null);
   const [stockedMessage, setStockedMessage] = useState("");
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
   const autoHandoffStartedRef = useRef(false);
+  useEffect(() => {
+    saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "" });
+  }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence]);
   const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
   const plan = generated || sample;
   const groceries = buildGroceryList(plan, generationContext.kitchenItems);
@@ -265,9 +270,13 @@ export default function MealPlanLab() {
 
   useEffect(() => {
     if (handoffSource !== "smoothie" || !smoothieContext?.recipeName || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;
+    if (restoredSession?.generated?.length && restoredSession.smoothieRecipeName === smoothieContext.recipeName) {
+      autoHandoffStartedRef.current = true;
+      return;
+    }
     autoHandoffStartedRef.current = true;
     generate(0, goal, days);
-  }, [handoffSource, smoothieContext?.recipeName, unlocked, isOnboarded]);
+  }, [handoffSource, smoothieContext?.recipeName, unlocked, isOnboarded, restoredSession]);
 
   useEffect(() => {
     if (handoffSource !== "astra" || !astraTransfer || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;

@@ -217,8 +217,10 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const fruit = pickKitchen(available, ["Fruit"], offset + 3);
   const seed = pickKitchen(available, ["Seed", "Nut butter"], offset + 4);
   const targetAccent = (goalAccents[goal] || goalAccents.general)[offset % (goalAccents[goal] || goalAccents.general).length];
+  const isWaffleBreakfast = moment === "Breakfast" && /waffle/i.test(grain?.name || "");
+  const isSavoryProtein = /chicken|turkey|sausage|egg|tofu|tempeh/i.test(protein?.name || "");
   const chosen = moment === "Breakfast"
-    ? [protein, grain, fruit || vegetable, seed]
+    ? [protein, grain, fruit || vegetable, isWaffleBreakfast && isSavoryProtein ? null : seed]
     : moment === "Lunch"
       ? [protein, grain, vegetable, secondVegetable]
       : moment === "Snack"
@@ -244,7 +246,23 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
     "Combine the cooked components, add the profile-aware seasoning, and serve one planned portion.",
     "Refrigerate perishable leftovers within two hours.",
   ] : ["Measure the listed ingredients.", "Combine them in one snack portion and serve promptly."];
-  return { meal: moment, food: adaptForRestrictions(food, profile), pantryMatch: unique.map((item) => item.source).join(", "), ingredients, instructions, requiresCooking, seasoningRecommendation, pantryDriven: true };
+  const proteinName = protein?.name || "the protein";
+  const grainName = grain?.name || "the grain";
+  const vegetableNames = [vegetable?.name, secondVegetable?.name].filter(Boolean).join(" and ");
+  const specificInstructions = requiresCooking ? moment === "Breakfast" ? [
+    `Prepare ${proteinName} separately; cook poultry to 165°F (74°C), or cook eggs or plant protein until set and steaming.`,
+    isWaffleBreakfast ? `Toast or heat ${grainName} until crisp.` : `Cook or warm ${grainName} according to its package directions.`,
+    fruit ? `Wash and portion ${fruit.name} as a fresh side.` : `Prepare ${vegetable?.name || "the produce"} as listed.`,
+    seasoningRecommendation ? `Use ${seasoningRecommendation.name} on the savory protein only, then plate the components together.` : "Plate the cooked and fresh components together as one serving.",
+    "Refrigerate perishable leftovers within two hours.",
+  ] : [
+    `Prepare ${proteinName} to a safe internal temperature; poultry must reach 165°F (74°C).`,
+    `Cook ${grainName} according to its package directions.`,
+    vegetableNames ? `Cut ${vegetableNames} evenly, then roast or sauté until tender and lightly browned.` : "Prepare the listed produce and fresh garnishes.",
+    seasoningRecommendation ? `Combine the cooked components and season with ${seasoningRecommendation.name} to taste.` : "Combine the cooked components and season lightly to taste.",
+    "Serve one planned portion and refrigerate perishable leftovers within two hours.",
+  ] : ["Measure the listed ingredients for one serving.", `Combine ${names.join(", ")} in a coherent snack plate or bowl and serve promptly.`];
+  return { meal: moment, food: adaptForRestrictions(food, profile), pantryMatch: unique.map((item) => item.source).join(", "), ingredients, instructions: specificInstructions, requiresCooking, seasoningRecommendation, pantryDriven: true };
 }
 
 function pantryMatchFor(moment, recognized, dayIndex) {

@@ -20,6 +20,7 @@ import { getSmoothiePreference, saveSmoothiePreference } from "../utilities/smoo
 import { buildSmoothieVisualPreview } from "../utilities/smoothieVisualPreview";
 import { mergeAiSmoothieProposal } from "../utilities/aiSmoothie";
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
+import { getKernelSession, saveKernelSession } from "../utilities/kernelSessionStorage";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/smoothieBuilder.css";
@@ -62,6 +63,7 @@ export default function SmoothieLab() {
 
 function ScopedSmoothieLab({ storageScope }) {
   const generationEpochRef = useRef(0);
+  const restoredSession = useMemo(() => getKernelSession(storageScope, "smoothie"), [storageScope]);
   const [params] = useSearchParams();
   const { profile, isOnboarded } = useSubscriber();
   const unlocked = useTierAccess(1);
@@ -72,9 +74,9 @@ function ScopedSmoothieLab({ storageScope }) {
   const synchronizedGoal = exchangeBrief.signals.movement?.goal || exchangeBrief.signals.meals?.goal;
   const rememberedGoal = exchangeBrief.kernelMemory?.goals?.at(-1);
   const initialGoal = goals.some(([value]) => value === astraTransfer?.goal) ? astraTransfer.goal : goals.some(([value]) => value === requestedGoal) ? requestedGoal : rememberedGoal || profile.healthGoals?.[0] || synchronizedGoal || "general";
-  const [selectedGoals, setSelectedGoals] = useState([goals.some(([value]) => value === initialGoal) ? initialGoal : "general"]);
+  const [selectedGoals, setSelectedGoals] = useState(() => restoredSession?.selectedGoals?.length ? restoredSession.selectedGoals : [goals.some(([value]) => value === initialGoal) ? initialGoal : "general"]);
   const goal = selectedGoals[0];
-  const [size, setSize] = useState(astraTransfer?.sizeOz || 16);
+  const [size, setSize] = useState(restoredSession?.size || astraTransfer?.sizeOz || 16);
   const [inventory, setInventory] = useState(() => getKitchenInventory(storageScope));
   const [measurementSystem, setMeasurementSystem] = useState(getMeasurementSystem);
   useEffect(() => {
@@ -87,17 +89,18 @@ function ScopedSmoothieLab({ storageScope }) {
   const [kitchenZone, setKitchenZone] = useState("pantry");
   const [pantryCategory, setPantryCategory] = useState("Fruit");
   const [pantrySearch, setPantrySearch] = useState("");
-  const [useOnlyPantry, setUseOnlyPantry] = useState(false);
+  const [useOnlyPantry, setUseOnlyPantry] = useState(Boolean(restoredSession?.useOnlyPantry));
   const [pantryOpen, setPantryOpen] = useState(false);
-  const [customName, setCustomName] = useState("");
+  const [customName, setCustomName] = useState(restoredSession?.customName || "");
   const baseRecipe = useMemo(() => generatePersonalizedSmoothie(workingProfile, selectedGoals, size), [workingProfile, selectedGoals, size]);
   const [selectedNames, setSelectedNames] = useState([]);
   const [ingredientReplacements, setIngredientReplacements] = useState({});
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-  const [generatedRecipe, setGeneratedRecipe] = useState(null);
+  const [generatedRecipe, setGeneratedRecipe] = useState(restoredSession?.generatedRecipe || null);
+  const preserveRestoredRecipeRef = useRef(Boolean(restoredSession?.generatedRecipe));
   const [visualStatus, setVisualStatus] = useState("idle");
-  const [generationStatus, setGenerationStatus] = useState("idle");
-  const [generationMessage, setGenerationMessage] = useState("");
+  const [generationStatus, setGenerationStatus] = useState(restoredSession?.generationStatus || "idle");
+  const [generationMessage, setGenerationMessage] = useState(restoredSession?.generationMessage || "");
   const [saved, setSaved] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
   const [alternateIndex, setAlternateIndex] = useState(0);
@@ -123,11 +126,16 @@ function ScopedSmoothieLab({ storageScope }) {
       }, baseRecipe));
       setGenerationStatus("transferred");
       setGenerationMessage("Astra transferred this exact smoothie concept for your review. Nothing is saved until you choose Save generated recipe.");
-    } else setGeneratedRecipe(null);
+    } else if (preserveRestoredRecipeRef.current) preserveRestoredRecipeRef.current = false;
+    else setGeneratedRecipe(null);
     setVisualStatus("idle");
     setSaved(false);
     setFeedbackStatus("");
   }, [storageScope, selectedGoals, size, profile.allergies, profile.avoidIngredients, profile.dietaryPattern, astraTransfer?.id]);
+
+  useEffect(() => {
+    saveKernelSession(storageScope, "smoothie", { selectedGoals, size, useOnlyPantry, customName, generatedRecipe, generationStatus, generationMessage });
+  }, [storageScope, selectedGoals, size, useOnlyPantry, customName, generatedRecipe, generationStatus, generationMessage]);
 
   useEffect(() => {
     saveKitchenInventory(inventory, storageScope);
