@@ -32,12 +32,18 @@ export function getKernelSessions(scope) {
 export function restoreKernelSessions(sessions, scope) {
   if (!sessions || typeof sessions !== "object") return;
   for (const kernel of ["smoothie", "meals"]) {
+    if (!Object.prototype.hasOwnProperty.call(sessions, kernel)) continue;
     if (sessions[kernel] && typeof sessions[kernel] === "object") {
       localStorage.setItem(keyFor(scope, kernel), JSON.stringify(sessions[kernel]));
+    } else {
+      localStorage.removeItem(keyFor(scope, kernel));
     }
   }
 }
 
 export function clearKernelSession(scope, kernel) {
-  try { localStorage.removeItem(keyFor(scope, kernel)); } catch { /* Browser storage unavailable. */ }
+  try {
+    localStorage.removeItem(keyFor(scope, kernel));
+    notifyCloudChange(scope);
+  } catch { /* Browser storage unavailable. */ }
 }

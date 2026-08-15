@@ -30,6 +30,7 @@ import { useAuth } from "./context/AuthContext";
 import { useSubscriber } from "./context/SubscriberContext";
 import { subscribeEntitlement } from "./utilities/cloudSync";
 import { LanguageProvider } from "./context/LanguageContext";
+import { clearKernelSession } from "./utilities/kernelSessionStorage";
 
 const SmoothieLab = lazy(() => import("./pages/SmoothieLab"));
 const Frequencies = lazy(() => import("./pages/Frequencies"));
@@ -152,6 +153,7 @@ function Shell() {
       `Start a new ${activeKernel.label} session? Your saved profile, pantry, recipes, and cloud records will stay intact.`,
     );
     if (!confirmed) return;
+    clearKernelSession(accountKey, activeKernel.id);
     sessionStorage.removeItem(sessionScrollKey(accountKey, activeKernel.id));
     setKernelRevisions((current) => ({
       ...current,

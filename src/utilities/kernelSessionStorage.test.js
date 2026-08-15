@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { clearKernelSession, getKernelSession, saveKernelSession } from "./kernelSessionStorage";
+import { clearKernelSession, getKernelSession, restoreKernelSessions, saveKernelSession } from "./kernelSessionStorage";
 
 describe("Kernel session storage", () => {
   beforeEach(() => {
@@ -12,6 +12,11 @@ describe("Kernel session storage", () => {
     expect(getKernelSession("subscriber-b", "smoothie")).toBeNull();
     expect(getKernelSession("subscriber-a", "meals")).toBeNull();
     clearKernelSession("subscriber-a", "smoothie");
+    expect(getKernelSession("subscriber-a", "smoothie")).toBeNull();
+  });
+  it("applies an explicit cloud clearing marker", () => {
+    saveKernelSession("subscriber-a", "smoothie", { generatedRecipe: { name: "Old blend" } });
+    restoreKernelSessions({ smoothie: null }, "subscriber-a");
     expect(getKernelSession("subscriber-a", "smoothie")).toBeNull();
   });
 });
