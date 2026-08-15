@@ -81,6 +81,22 @@ describe("generateMealPlan", () => {
     expect(plan[0].meals.some((meal) => meal.pantryMatch)).toBe(true);
   });
 
+  it("changes and complements fallback meals when the paired smoothie changes", () => {
+    const kitchenItems = ["Chicken thighs", "Tuna", "Eggs", "Waffles", "Bread", "Oats", "Apple", "Banana", "Spinach", "Broccoli", "Carrot", "Cucumber"];
+    const pearPlan = generateMealPlan({}, "healthyWeight", 1, { kitchenItems, smoothieContext: {
+      recipeName: "Pear Hemp Smoothie",
+      ingredients: [{ name: "Banana", amount: 0.5, unit: "cup" }, { name: "Spinach", amount: 1, unit: "cup" }],
+    } });
+    const dragonPlan = generateMealPlan({}, "healthyWeight", 1, { kitchenItems, smoothieContext: {
+      recipeName: "Dragon Passion Smoothie",
+      ingredients: [{ name: "Carrot", amount: 0.5, unit: "cup" }, { name: "Cucumber", amount: 1, unit: "cup" }],
+    } });
+    const companionFoods = (plan) => plan[0].meals.slice(1).map((meal) => meal.food);
+    expect(companionFoods(pearPlan)).not.toEqual(companionFoods(dragonPlan));
+    expect(companionFoods(pearPlan).join(" ").toLowerCase()).not.toContain("banana");
+    expect(companionFoods(pearPlan).join(" ").toLowerCase()).not.toContain("spinach");
+  });
+
   it("keeps a pantry-built chicken and waffles breakfast coherent and recipe-specific", () => {
     const breakfast = generateMealPlan({}, "healthyweight", 1, {
       kitchenItems: ["Chicken thighs", "Waffles", "Apple", "Peanut butter", "Spinach"],

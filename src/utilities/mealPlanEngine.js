@@ -218,8 +218,10 @@ function goalAccentQuantity(name = "") {
   return "1 cup";
 }
 
-function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed) {
-  const available = recognized.filter((item) => pantryEligible(item, profile));
+function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed, smoothieIngredients = new Set()) {
+  const eligible = recognized.filter((item) => pantryEligible(item, profile));
+  const complementary = eligible.filter((item) => !smoothieIngredients.has(item.name.toLowerCase()));
+  const available = complementary.length >= 4 ? complementary : eligible;
   const offset = dayIndex * 3 + occasionIndex + variationSeed;
   const protein = pickKitchen(available, ["Protein"], offset, moment !== "Snack" ? /powder|collagen/ : /$^/);
   const grain = pickKitchen(available, ["Grain"], offset + 1);
@@ -288,9 +290,9 @@ function pantryMatchFor(moment, recognized, dayIndex) {
   return candidates.length ? candidates[dayIndex % candidates.length] : null;
 }
 
-function buildMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed = 0) {
+function buildMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed = 0, smoothieIngredients = new Set()) {
   if (recognized.filter((item) => pantryEligible(item, profile)).length >= 4) {
-    return buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed);
+    return buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed, smoothieIngredients);
   }
   const bases = mealBases[moment];
   const base = bases[(dayIndex + occasionIndex * 2 + variationSeed) % bases.length];
@@ -315,6 +317,18 @@ function buildMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, v
     requiresCooking: details.requiresCooking,
     seasoningRecommendation: details.seasoningRecommendation,
   };
+}
+
+function smoothieContextSeed(context = {}) {
+  const signature = JSON.stringify({
+    recipeName: context.recipeName || "",
+    ingredients: (context.ingredients || []).map((item) => typeof item === "string"
+      ? item.toLowerCase()
+      : `${item.name || ""}:${item.amount ?? ""}:${item.unit || ""}`.toLowerCase()),
+  });
+  let hash = 0;
+  for (let index = 0; index < signature.length; index += 1) hash = ((hash * 31) + signature.charCodeAt(index)) >>> 0;
+  return hash % 997;
 }
 
 function buildMealDetails(moment, base, accent, harvest, profile = {}, pantryMatch = null, goal = "general") {
@@ -388,7 +402,12 @@ export function generateMealPlan(profile = {}, goal = "general", days = 1, optio
   const smoothieCycle = smoothieGoalCycles[goal] || smoothieGoalCycles.general;
   const subscriberSeed = profileVariationSeed(profile);
   const requestedVariation = Number.isInteger(options.variationSeed) ? options.variationSeed : 0;
-  const variationSeed = subscriberSeed + requestedVariation;
+  const pairedSmoothieSeed = options.smoothieContext?.recipeName ? smoothieContextSeed(options.smoothieContext) : 0;
+  const variationSeed = subscriberSeed + requestedVariation + pairedSmoothieSeed;
+  const pairedSmoothieIngredients = new Set((options.smoothieContext?.ingredients || [])
+    .map((item) => (typeof item === "string" ? item : item?.name))
+    .filter(Boolean)
+    .map((name) => name.toLowerCase()));
 
   return Array.from({ length: count }, (_, dayIndex) => {
     const smoothieGoal = smoothieCycle[dayIndex % smoothieCycle.length];
@@ -427,7 +446,7 @@ export function generateMealPlan(profile = {}, goal = "general", days = 1, optio
           instructions: ["Add liquid first, followed by soft ingredients, frozen produce, and ice.", "Blend for 45–60 seconds until smooth.", "Pour and serve promptly."],
         },
         ...["Breakfast", "Lunch", "Snack", "Dinner"].map((moment, occasionIndex) =>
-          buildMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed)),
+          buildMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed, pairedSmoothieIngredients)),
       ],
     };
   });
