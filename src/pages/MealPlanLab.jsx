@@ -74,6 +74,10 @@ export default function MealPlanLab() {
     return null;
   };
   const smoothieContext = readStoredContext("naturesElixirz.latestSmoothieContext");
+  const smoothieFingerprint = smoothieContext?.recipeName ? JSON.stringify({
+    recipeName: smoothieContext.recipeName,
+    ingredients: (smoothieContext.ingredients || []).map(({ name, amount, unit }) => ({ name, amount, unit })),
+  }) : "";
   const frequencyContext = handoffSource === "frequency"
     ? readStoredContext("naturesElixirz.latestFrequencyContext")
     : null;
@@ -119,7 +123,7 @@ export default function MealPlanLab() {
   const [stockedMessage, setStockedMessage] = useState("");
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
-  const autoHandoffStartedRef = useRef(false);
+  const autoHandoffStartedRef = useRef("");
   useEffect(() => {
     if (!nutritionRisk.generationLimited) return;
     setGenerated(null);
@@ -127,8 +131,8 @@ export default function MealPlanLab() {
     setGenerationMessage(nutritionRisk.message);
   }, [nutritionRisk.generationLimited, nutritionRisk.message]);
   useEffect(() => {
-    saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "" });
-  }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence]);
+    saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "", smoothieFingerprint });
+  }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieFingerprint]);
   const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
   const plan = generated || sample;
   const groceries = buildGroceryList(plan, generationContext.kitchenItems);
@@ -283,18 +287,22 @@ export default function MealPlanLab() {
   }
 
   useEffect(() => {
-    if (handoffSource !== "smoothie" || !smoothieContext?.recipeName || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;
-    if (restoredSession?.generated?.length && restoredSession.smoothieRecipeName === smoothieContext.recipeName) {
-      autoHandoffStartedRef.current = true;
+    const handoffIdentity = `smoothie:${smoothieFingerprint}`;
+    if (handoffSource !== "smoothie" || !smoothieFingerprint || !unlocked || !isOnboarded || autoHandoffStartedRef.current === handoffIdentity) return;
+    if (restoredSession?.generated?.length && restoredSession.smoothieFingerprint === smoothieFingerprint) {
+      autoHandoffStartedRef.current = handoffIdentity;
       return;
     }
-    autoHandoffStartedRef.current = true;
+    autoHandoffStartedRef.current = handoffIdentity;
+    setGenerated(null);
     generate(0, goal, days);
-  }, [handoffSource, smoothieContext?.recipeName, unlocked, isOnboarded, restoredSession]);
+  }, [handoffSource, smoothieFingerprint, unlocked, isOnboarded, restoredSession]);
 
   useEffect(() => {
-    if (handoffSource !== "astra" || !astraTransfer || !unlocked || !isOnboarded || autoHandoffStartedRef.current) return;
-    autoHandoffStartedRef.current = true;
+    const handoffIdentity = `astra:${astraTransfer?.id || ""}`;
+    if (handoffSource !== "astra" || !astraTransfer || !unlocked || !isOnboarded || autoHandoffStartedRef.current === handoffIdentity) return;
+    autoHandoffStartedRef.current = handoffIdentity;
+    setGenerated(null);
     generate(0, goal, days);
   }, [handoffSource, astraTransfer?.id, unlocked, isOnboarded]);
 
