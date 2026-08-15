@@ -218,18 +218,49 @@ function goalAccentQuantity(name = "") {
   return "1 cup";
 }
 
+function accentFitsMoment(accent = "", moment = "") {
+  const value = accent.toLowerCase();
+  if (moment === "Breakfast" || moment === "Snack") return true;
+  return !/oats?|nut butter|seed butter|plain yogurt|mixed berries|banana/.test(value);
+}
+
+function chooseGoalAccent(goal, offset, moment) {
+  const accents = goalAccents[goal] || goalAccents.general;
+  return accents.map((_, index) => accents[(offset + index) % accents.length])
+    .find((accent) => accentFitsMoment(accent, moment)) || accents[offset % accents.length];
+}
+
+function proteinPreparationInstruction(name = "") {
+  const value = name.toLowerCase();
+  if (/cold cuts?|deli|ham|pepperoni/.test(value)) return `Keep ${name} refrigerated and serve according to its ready-to-eat package directions; heat only if the label or subscriber preference calls for it.`;
+  if (/chicken|turkey|poultry/.test(value)) return `Cook ${name} to 165°F (74°C).`;
+  if (/ground meat|ground beef|ground pork/.test(value)) return `Cook ${name} to 160°F (71°C).`;
+  if (/pork|steak|beef/.test(value)) return `Cook ${name} to at least 145°F (63°C), then rest whole cuts for 3 minutes.`;
+  if (/fish|salmon|tuna/.test(value)) return `Cook ${name} to 145°F (63°C), or until opaque and easily flaked.`;
+  if (/egg/.test(value)) return `Cook ${name} until the whites and yolks are set.`;
+  return `Cook or warm ${name} according to its package directions until safely prepared and steaming where applicable.`;
+}
+
 function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occasionIndex, variationSeed, smoothieIngredients = new Set()) {
   const eligible = recognized.filter((item) => pantryEligible(item, profile));
   const complementary = eligible.filter((item) => !smoothieIngredients.has(item.name.toLowerCase()));
   const available = complementary.length >= 4 ? complementary : eligible;
   const offset = dayIndex * 3 + occasionIndex + variationSeed;
-  const protein = pickKitchen(available, ["Protein"], offset, moment !== "Snack" ? /powder|collagen/ : /$^/);
-  const grain = pickKitchen(available, ["Grain"], offset + 1);
+  const proteinReject = moment === "Dinner"
+    ? /powder|collagen|cold cuts?|deli|pepperoni/
+    : moment === "Snack"
+      ? /powder|collagen|cold cuts?|deli|pepperoni|chicken|turkey|pork|beef|steak|tuna|salmon|fish/
+      : moment === "Breakfast"
+        ? /powder|collagen|cold cuts?|deli|pepperoni/
+        : /powder|collagen/;
+  const grainReject = moment === "Lunch" || moment === "Dinner" ? /waffle|pancake|oats?/ : /$^/;
+  const protein = pickKitchen(available, ["Protein"], offset, proteinReject);
+  const grain = pickKitchen(available, ["Grain"], offset + 1, grainReject);
   const vegetable = pickKitchen(available, ["Vegetable"], offset + 2);
   const secondVegetable = pickKitchen(available, ["Vegetable"], offset + 5);
   const fruit = pickKitchen(available, ["Fruit"], offset + 3);
   const seed = pickKitchen(available, ["Seed", "Nut butter"], offset + 4);
-  const targetAccent = (goalAccents[goal] || goalAccents.general)[offset % (goalAccents[goal] || goalAccents.general).length];
+  const targetAccent = chooseGoalAccent(goal, offset, moment);
   const isWaffleBreakfast = moment === "Breakfast" && /waffle/i.test(grain?.name || "");
   const isSavoryProtein = /chicken|turkey|sausage|egg|tofu|tempeh/i.test(protein?.name || "");
   const chosen = moment === "Breakfast"
@@ -249,7 +280,7 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
     ? `${names.slice(0, 2).join(" and ")} breakfast with ${names.slice(2).join(" and ")}`
     : moment === "Snack"
       ? `${names.slice(0, 2).join(" with ")}${names[2] ? ` and ${names[2]}` : ""}`
-      : `${names[0] || "Whole-food protein"} ${moment.toLowerCase()} bowl with ${names.slice(1).join(", ")}`;
+      : `${names[0] || "Whole-food protein"} ${/cold cuts?|deli|ham|pepperoni/i.test(names[0] || "") ? "plate" : `${moment.toLowerCase()} bowl`} with ${names.slice(1).join(", ")}`;
   const requiresCooking = moment !== "Snack" && (moment !== "Breakfast" || Boolean(grain || /egg/.test(protein?.name.toLowerCase() || "")));
   const seasoningRecommendation = requiresCooking ? recommendCulinarySeasoning(profile, goal, food) : null;
   if (seasoningRecommendation) ingredients.push({ quantity: "1/2 tsp", name: seasoningRecommendation.name, availability: "needed" });
@@ -264,13 +295,13 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const grainName = grain?.name || "the grain";
   const vegetableNames = [vegetable?.name, secondVegetable?.name].filter(Boolean).join(" and ");
   const specificInstructions = requiresCooking ? moment === "Breakfast" ? [
-    `Prepare ${proteinName} separately; cook poultry to 165°F (74°C), or cook eggs or plant protein until set and steaming.`,
+    proteinPreparationInstruction(proteinName),
     isWaffleBreakfast ? `Toast or heat ${grainName} until crisp.` : `Cook or warm ${grainName} according to its package directions.`,
     fruit ? `Wash and portion ${fruit.name} as a fresh side.` : `Prepare ${vegetable?.name || "the produce"} as listed.`,
     seasoningRecommendation ? `Use ${seasoningRecommendation.name} on the savory protein only, then plate the components together.` : "Plate the cooked and fresh components together as one serving.",
     "Refrigerate perishable leftovers within two hours.",
   ] : [
-    `Prepare ${proteinName} to a safe internal temperature; poultry must reach 165°F (74°C).`,
+    proteinPreparationInstruction(proteinName),
     `Cook ${grainName} according to its package directions.`,
     vegetableNames ? `Cut ${vegetableNames} evenly, then roast or sauté until tender and lightly browned.` : "Prepare the listed produce and fresh garnishes.",
     seasoningRecommendation ? `Combine the cooked components and season with ${seasoningRecommendation.name} to taste.` : "Combine the cooked components and season lightly to taste.",

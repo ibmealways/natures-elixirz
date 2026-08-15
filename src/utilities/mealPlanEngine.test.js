@@ -97,6 +97,24 @@ describe("generateMealPlan", () => {
     expect(companionFoods(pearPlan).join(" ").toLowerCase()).not.toContain("spinach");
   });
 
+  it("keeps deli meat, oats, waffles, and pork in coherent meal roles", () => {
+    const kitchenItems = ["Cold Cuts (Ham, Cheese, Pepperoni, Buffalo Chicken)", "Pork tenderloin", "Eggs", "Rice", "Waffles", "Oats", "Idaho Mashed Potatoes", "Blackberries", "Broccoli", "Spinach", "Cherry tomatoes", "Nut butter"];
+    const meals = Array.from({ length: 20 }, (_, variationSeed) => generateMealPlan({}, "healthyWeight", 1, { kitchenItems, variationSeed })[0].meals).flat();
+    const deliMeals = meals.filter((meal) => /cold cuts?/i.test(meal.food));
+    expect(deliMeals.length).toBeGreaterThan(0);
+    deliMeals.forEach((meal) => {
+      expect(meal.food).not.toMatch(/oats?/i);
+      expect(meal.instructions.join(" ")).not.toMatch(/165°F/);
+      expect(meal.instructions.join(" ")).toMatch(/ready-to-eat package directions/i);
+    });
+    const porkDinners = meals.filter((meal) => meal.meal === "Dinner" && /pork/i.test(meal.food));
+    expect(porkDinners.length).toBeGreaterThan(0);
+    porkDinners.forEach((meal) => {
+      expect(meal.food).not.toMatch(/waffle|nut butter|oats?/i);
+      expect(meal.instructions.join(" ")).toMatch(/145°F/);
+    });
+  });
+
   it("keeps a pantry-built chicken and waffles breakfast coherent and recipe-specific", () => {
     const breakfast = generateMealPlan({}, "healthyweight", 1, {
       kitchenItems: ["Chicken thighs", "Waffles", "Apple", "Peanut butter", "Spinach"],
