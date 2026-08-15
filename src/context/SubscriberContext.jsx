@@ -19,6 +19,7 @@ import { getKitchenInventory, restoreKitchenInventory } from "../utilities/kitch
 import { getMealKitchenInventory, restoreMealKitchenInventory } from "../utilities/mealKitchenInventory";
 import { getWellnessExchange, restoreWellnessExchange } from "../utilities/wellnessExchange";
 import { getAstraConversationBundle, restoreAstraConversation } from "../utilities/astraConversationStorage";
+import { getNutritionLabels, restoreNutritionLabels } from "../utilities/nutritionLabelRegistry";
 
 const SubscriberContext = createContext(null);
 const announceDataReady = () => {
@@ -55,6 +56,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       mealKitchen: getMealKitchenInventory(scope),
       exchange: getWellnessExchange(scope),
       astraConversation: getAstraConversationBundle(scope),
+      nutritionLabels: getNutritionLabels(scope),
     });
     const hasLocalData = (bundle) => Boolean(
       hasCloudProfileRecord(bundle.profile)
@@ -67,10 +69,11 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       || [...bundle.mealKitchen.pantry, ...bundle.mealKitchen.fridge, ...bundle.mealKitchen.freezer].length
       || bundle.exchange?.events?.length
       || bundle.astraConversation?.messages?.length
+      || bundle.nutritionLabels?.length
     );
     const snapshot = () => {
       const local = localBundle(storageScope);
-      return uploadWellnessData(user, local.profile, local.recipes, local.journey, local.movement, local.kitchen, local.mealKitchen, local.exchange, local.astraConversation);
+      return uploadWellnessData(user, local.profile, local.recipes, local.journey, local.movement, local.kitchen, local.mealKitchen, local.exchange, local.astraConversation, local.nutritionLabels);
     };
 
     const applyCloud = (cloud) => {
@@ -83,6 +86,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
       if (cloud.mealKitchen) restoreMealKitchenInventory(cloud.mealKitchen, storageScope);
       if (cloud.exchange) restoreWellnessExchange(cloud.exchange, storageScope);
       if (cloud.astraConversation) restoreAstraConversation(cloud.astraConversation, storageScope);
+      if (cloud.nutritionLabels) restoreNutritionLabels(cloud.nutritionLabels, storageScope);
       restoreSavedRecipes(cloud.recipes, storageScope);
       notifyCloudRestore(storageScope);
       queueMicrotask(() => { applyingRemote = false; });
@@ -101,6 +105,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
           mealKitchen: cloud.mealKitchen || { pantry: [], fridge: [], freezer: [] },
           exchange: cloud.exchange || { signals: {}, events: [], memories: {} },
           astraConversation: cloud.astraConversation || { messages: [] },
+          nutritionLabels: cloud.nutritionLabels || [],
         });
         if (hasCloud) {
           applyCloud(cloud);
@@ -133,6 +138,7 @@ function ScopedSubscriberProvider({ children, storageScope, user }) {
             restoreMealKitchenInventory(guestLocal.mealKitchen, storageScope);
             restoreWellnessExchange(guestLocal.exchange, storageScope);
             restoreAstraConversation(guestLocal.astraConversation, storageScope);
+            restoreNutritionLabels(guestLocal.nutritionLabels, storageScope);
             restoreSavedRecipes(guestLocal.recipes, storageScope);
             notifyCloudRestore(storageScope);
           }

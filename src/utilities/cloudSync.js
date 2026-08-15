@@ -15,7 +15,7 @@ export const hasMeaningfulProfile = (profile = {}) => Boolean(
 // A clearing marker is meaningful synchronization state even though it contains no wellness values.
 export const hasCloudProfileRecord = (profile = {}) => Boolean(profile?.clearedAt || hasMeaningfulProfile(profile));
 
-export async function uploadWellnessData(user, profile, recipes, journey = {}, movement = {}, kitchen = {}, mealKitchen = {}, exchange = {}, astraConversation = {}) {
+export async function uploadWellnessData(user, profile, recipes, journey = {}, movement = {}, kitchen = {}, mealKitchen = {}, exchange = {}, astraConversation = {}, nutritionLabels = null) {
   requireCloud(user);
   const batch = writeBatch(db);
   const userRef = doc(db, "users", user.uid);
@@ -26,7 +26,9 @@ export async function uploadWellnessData(user, profile, recipes, journey = {}, m
     : profile;
   const wellnessProfile = Object.fromEntries(Object.entries(protectedProfile || {})
     .filter(([key]) => key !== "tier" && !key.startsWith("subscription")));
-  batch.set(userRef, { profile: wellnessProfile, journey, movement, kitchen, mealKitchen, exchange, astraConversation, email: user.email, updatedAt: serverTimestamp() }, { merge: true });
+  const accountData = { profile: wellnessProfile, journey, movement, kitchen, mealKitchen, exchange, astraConversation, email: user.email, updatedAt: serverTimestamp() };
+  if (Array.isArray(nutritionLabels)) accountData.nutritionLabels = nutritionLabels;
+  batch.set(userRef, accountData, { merge: true });
   const safeRecipes = Array.isArray(recipes) ? recipes.filter((recipe) => recipe?.id) : [];
   const remoteRecipes = await getDocs(collection(userRef, "recipes"));
   const localIds = new Set(safeRecipes.map((recipe) => recipe.id));
@@ -49,6 +51,7 @@ export async function downloadWellnessData(user) {
     mealKitchen: userSnapshot.exists() ? userSnapshot.data().mealKitchen : null,
     exchange: userSnapshot.exists() ? userSnapshot.data().exchange : null,
     astraConversation: userSnapshot.exists() ? userSnapshot.data().astraConversation : null,
+    nutritionLabels: userSnapshot.exists() ? userSnapshot.data().nutritionLabels : null,
     recipes: recipesSnapshot.docs.map((recipe) => recipe.data()),
   };
 }
@@ -100,6 +103,7 @@ export function subscribeWellnessData(user, onData, onError = console.error) {
       mealKitchen: account?.mealKitchen || null,
       exchange: account?.exchange || null,
       astraConversation: account?.astraConversation || null,
+      nutritionLabels: account?.nutritionLabels || null,
       recipes,
     });
   };

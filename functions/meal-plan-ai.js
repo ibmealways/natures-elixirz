@@ -1,6 +1,7 @@
 import { assessNutritionSelection, assertNutritionSafety, createNutritionBrief } from "./nutrition-intelligence.js";
 import { validateMealDayQuantities, validateMealIngredientQuantity } from "./meal-quantity-validation.js";
 import { assessHighRiskNutritionProfile, summarizeMultiDayNutrition } from "./nutrition-foundation.js";
+import { validateNutritionLabels } from "./branded-nutrition.js";
 
 const MEAL_TYPES = ["Smoothie", "Breakfast", "Lunch", "Snack", "Dinner"];
 
@@ -85,6 +86,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       notes: cleanList(request.astraRequest.notes, 8),
     } : null,
     kitchenItems: cleanList(request.kitchenItems),
+    nutritionLabels: validateNutritionLabels(request.nutritionLabels),
     smoothieContext: rawSmoothie ? {
       recipeName: String(rawSmoothie.recipeName || "").slice(0, 120),
       goal: String(rawSmoothie.goal || "").slice(0, 60),
@@ -152,6 +154,7 @@ AVAILABLE PANTRY, FRIDGE, AND FREEZER ITEMS: ${JSON.stringify(context.kitchenIte
 LATEST TIER 1 SMOOTHIE CONTEXT: ${JSON.stringify(context.smoothieContext)}
 OPTIONAL TIER 2 FREQUENCY CONTEXT: ${context.frequencyIncludedBySubscriber ? JSON.stringify(context.frequencyContext) : "Not included—the subscriber came directly from Tier 1 or did not choose Frequency."}
 EXPLICIT SUBSCRIBER FEEDBACK: ${JSON.stringify(context.learning)}
+SUBSCRIBER-ENTERED PACKAGE NUTRITION FACTS: ${JSON.stringify(context.nutritionLabels)}
 ALTERNATE REQUEST NUMBER: ${context.variation}
 
 Requirements:
@@ -165,6 +168,7 @@ Requirements:
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
 - Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner. Avoid repeating the same dish or dominant ingredients across days.
 - Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, oz, piece, or count. Do not use decimals.
+- For a linked branded product, use its exact linked ingredient name and a compatible label serving unit. Package values are subscriber-entered and schema-validated, not independently laboratory-verified.
 - Smoothies require blending instructions. Cooked meals need concise, food-safe instructions. Include ordinary culinary herbs or spices where appropriate; do not prescribe supplements or medicinal doses.
 - Never select foods to amplify, boost, complement, or counteract a medication's pharmacologic effect.
 - Review the exact medication text for possible food interactions. Avoid a recognized conflict when a safe ordinary-food substitute exists; otherwise set medicationSafety.reviewRequired to true and advise confirmation with a pharmacist.
@@ -220,6 +224,7 @@ export function validateMealPlanProposal(proposal, context) {
         profile: context.profile,
         goals: [context.goal],
         kind: meal.meal.toLowerCase(),
+        nutritionLabels: context.nutritionLabels,
       }));
       return {
         meal: meal.meal,

@@ -799,7 +799,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
   const recentRecipes = [...generatedHistory.docs.map((item) => item.data()), ...savedRecipes.docs.map((item) => item.data())]
     .filter((item, index, all) => all.findIndex((candidate) => candidate.name === item.name) === index)
     .slice(0, 12);
-  const context = buildSmoothieAiContext(account.profile, request.data || {}, recentRecipes, account.kitchen || {});
+  const context = buildSmoothieAiContext(account.profile, request.data || {}, recentRecipes, account.kitchen || {}, account.nutritionLabels || []);
   await consumeSmoothieRecipeGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   let validationFeedback = "";
@@ -848,7 +848,7 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   catch (error) { throw new HttpsError("failed-precondition", error.message); }
   const account = (await db.doc(`users/${uid}`).get()).data() || {};
   if (!account.profile?.completedAt || !account.profile?.name) throw new HttpsError("failed-precondition", "Complete and synchronize your profile before generating.");
-  const context = buildMealPlanContext(account.profile, request.data || {});
+  const context = buildMealPlanContext(account.profile, { ...(request.data || {}), nutritionLabels: account.nutritionLabels || [] });
   const highRiskScreen = assessHighRiskNutritionProfile(account.profile);
   if (highRiskScreen.generationLimited) {
     throw new HttpsError("failed-precondition", highRiskScreen.message);

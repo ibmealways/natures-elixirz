@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Activity, Apple, Bone, Brain, Dna, Droplets, Dumbbell, Eye, Flame, HeartPulse, Leaf, LockKeyhole, MessageCircle, ShieldPlus, Sparkles, Sun, Waves, Zap } from "lucide-react";
 import GlowNav from "../components/GlowNav";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
+import NutritionFactsRegistry from "../components/NutritionFactsRegistry";
 import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
@@ -351,6 +352,7 @@ function ScopedSmoothieLab({ storageScope }) {
         </div>
         </div>}
       </div>
+      <NutritionFactsRegistry scope={storageScope} pantryItems={allInventoryItems} />
       {useOnlyPantry
         ? <div className="ne-alert"><strong>Pantry-only is active.</strong> Astra will use only recognized ingredients from the pantry box above; preset recipe ingredients are excluded.</div>
         : <div className="astra-ingredient-preview">

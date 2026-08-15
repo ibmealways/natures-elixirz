@@ -1,4 +1,5 @@
 import { assessNutritionSelection, assertNutritionSafety, createNutritionBrief } from "./nutrition-intelligence.js";
+import { validateNutritionLabels } from "./branded-nutrition.js";
 
 const GROUPS = ["Fruit", "Vegetable", "Protein", "Seed", "Liquid", "Spice", "Grain", "Nut butter", "Sweetener"];
 const UNITS = ["cup", "tbsp", "tsp", "scoop", "piece"];
@@ -63,7 +64,7 @@ export const smoothieRecipeSchema = {
   },
 };
 
-export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes = [], kitchen = {}) {
+export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes = [], kitchen = {}, nutritionLabels = []) {
   const goals = textList(request.goals).slice(0, 8);
   const pantry = ["pantry", "fridge", "freezer"].flatMap((zone) => textList(kitchen?.[zone])).slice(0, 160);
   const context = {
@@ -91,6 +92,7 @@ export function buildSmoothieAiContext(profile = {}, request = {}, recentRecipes
       alternateIndex: Math.min(50, Math.max(0, Number(request.alternateIndex) || 0)),
     },
     pantry,
+    nutritionLabels: validateNutritionLabels(nutritionLabels),
     recentRecipes: recentRecipes.slice(0, 12).map((recipe) => ({
       name: String(recipe?.name || "").slice(0, 80),
       ingredients: Array.isArray(recipe?.ingredients) ? recipe.ingredients.map((item) => String(item?.name || "")).filter(Boolean).slice(0, 12) : [],
@@ -131,6 +133,7 @@ Success means:
 - if conditions or medications create uncertainty, choose a conservative ordinary-food formula and say review is required rather than attempting treatment
 - never claim detoxification, disease reversal, quantum healing, chakra opening, or guaranteed outcomes
 - do not invent pantry items when pantryOnly is true
+- When a linked branded Nutrition Facts record is present, use its exact linked ingredient name and a compatible serving unit. Treat those values as subscriber-entered package data, not independent laboratory verification.
 
 Subscriber context:
 ${JSON.stringify(context)}`;
@@ -167,6 +170,7 @@ export function validateSmoothieProposal(proposal, context) {
     profile: context.profile,
     goals: context.request.goals,
     kind: "smoothie",
+    nutritionLabels: context.nutritionLabels,
   }));
   if (nutritionIntelligence.goalFitScore < 45) throw new Error("The AI recipe did not meaningfully fit the selected nutrition goals.");
   const reflux = context.nutritionBrief.refluxScreeningEnabled ? proposal.reflux : undefined;

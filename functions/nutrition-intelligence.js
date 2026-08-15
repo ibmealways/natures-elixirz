@@ -88,7 +88,7 @@ export function createNutritionBrief(profile = {}, goals = []) {
   };
 }
 
-export function assessNutritionSelection({ ingredients = [], profile = {}, goals = [], kind = "recipe" } = {}) {
+export function assessNutritionSelection({ ingredients = [], profile = {}, goals = [], kind = "recipe", nutritionLabels = [] } = {}) {
   const brief = createNutritionBrief(profile, goals);
   const names = ingredients.map((item) => String(item?.name || item || "").trim()).filter(Boolean);
   const prohibitedMatches = names.flatMap((name) => restrictionMatches(name, brief.prohibitedIngredients).map((restriction) => ({ ingredient: name, restriction })));
@@ -106,7 +106,7 @@ export function assessNutritionSelection({ ingredients = [], profile = {}, goals
     ...(duplicates.length ? [`Duplicate ingredients: ${[...new Set(duplicates)].join(", ")}.`] : []),
     ...(brief.professionalReviewRequired ? [brief.reviewReason] : []),
   ];
-  const evidence = ingredientEvidenceSummary(ingredients, profile);
+  const evidence = ingredientEvidenceSummary(ingredients, profile, nutritionLabels);
   return {
     version: "nutrition-intelligence-v1",
     kind,

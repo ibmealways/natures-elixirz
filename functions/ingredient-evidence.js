@@ -1,4 +1,5 @@
 import { FOOD_IDENTITY_METADATA, calculateVerifiedNutrients, foodIdentityFor, normalizeIngredientMass } from "./food-identity.js";
+import { calculateBrandedNutrients, LABEL_NUTRIENT_KEYS } from "./branded-nutrition.js";
 
 export const EVIDENCE_SOURCES = Object.freeze({
   usdaFdc: { id: "USDA-FDC", organization: "U.S. Department of Agriculture, Agricultural Research Service", title: "FoodData Central", url: "https://fdc.nal.usda.gov/", use: "Food identity, nutrient composition, and portion-weight reference data." },
@@ -82,7 +83,7 @@ export function refluxProfileEnabled(profile = {}) {
   return (Array.isArray(profile.conditions) ? profile.conditions : []).some((condition) => /acid reflux|heartburn|\bgerd\b|gastroesophageal reflux/i.test(String(condition)));
 }
 
-export function ingredientEvidenceSummary(ingredients = [], profile = {}) {
+export function ingredientEvidenceSummary(ingredients = [], profile = {}, nutritionLabels = []) {
   const matched = ingredients.map((item) => ({ name: String(item?.name || item), evidence: findIngredientEvidence(item?.name || item) })).filter((item) => item.evidence);
   const refluxEnabled = refluxProfileEnabled(profile);
   const matchedIngredients = matched.map(({ name, evidence }) => {
@@ -94,6 +95,27 @@ export function ingredientEvidenceSummary(ingredients = [], profile = {}) {
   });
   const verifiedIdentities = matchedIngredients.filter((item) => item.foodIdentity.fdcId);
   const normalizedMasses = matchedIngredients.filter((item) => Number.isFinite(item.normalizedServing.grams));
+  const brandedEstimate = calculateBrandedNutrients(ingredients, nutritionLabels);
+  const brandedNames = new Set(brandedEstimate.matchedIngredientNames.map(normalize));
+  const genericEstimate = calculateVerifiedNutrients(matchedIngredients.filter((item) => !brandedNames.has(normalize(item.name))));
+  const totalIngredientCount = ingredients.length;
+  const nutrientCoverage = Object.fromEntries(LABEL_NUTRIENT_KEYS.map((key) => {
+    const measuredIngredientCount = (genericEstimate.nutrientCoverage[key]?.measuredIngredientCount || 0) + (brandedEstimate.nutrientCoverage[key]?.measuredIngredientCount || 0);
+    return [key, { measuredIngredientCount, coveragePercent: totalIngredientCount ? Math.round(measuredIngredientCount / totalIngredientCount * 100) : 0 }];
+  }));
+  const calculatedIngredientCount = genericEstimate.calculatedIngredientCount + brandedEstimate.matchedIngredientNames.length;
+  const verifiedNutrientEstimate = {
+    totals: Object.fromEntries(LABEL_NUTRIENT_KEYS.map((key) => [key, Math.round(((genericEstimate.totals[key] || 0) + (brandedEstimate.totals[key] || 0)) * 10) / 10])),
+    nutrientCoverage,
+    calculatedIngredientCount,
+    totalIngredientCount,
+    coveragePercent: totalIngredientCount ? Math.round(calculatedIngredientCount / totalIngredientCount * 100) : 0,
+    status: calculatedIngredientCount === totalIngredientCount ? "complete-verified-estimate" : calculatedIngredientCount ? "partial-verified-subtotal" : "unavailable",
+    brandedLabelMatches: brandedEstimate.matchedIngredientNames,
+    brandedLabelUnresolved: brandedEstimate.unresolved,
+    provenance: ["USDA reference-food data", ...(brandedEstimate.matchedIngredientNames.length ? ["subscriber-entered package Nutrition Facts"] : [])],
+    boundary: brandedEstimate.matchedIngredientNames.length ? brandedEstimate.boundary : genericEstimate.boundary,
+  };
   return {
     catalogVersion: EVIDENCE_CATALOG_METADATA.version,
     catalogReleased: EVIDENCE_CATALOG_METADATA.released,
@@ -116,7 +138,7 @@ export function ingredientEvidenceSummary(ingredients = [], profile = {}) {
       status: normalizedMasses.length === ingredients.length ? "mass-normalized" : normalizedMasses.length ? "partially-normalized" : "identity-pending",
       unresolved: matchedIngredients.filter((item) => !Number.isFinite(item.normalizedServing.grams)).map((item) => ({ ingredient: item.name, reason: item.normalizedServing.reason })),
     },
-    verifiedNutrientEstimate: calculateVerifiedNutrients(matchedIngredients),
+    verifiedNutrientEstimate,
     sources: [EVIDENCE_SOURCES.usdaFdc, EVIDENCE_SOURCES.nihOds, ...(matched.some(({ evidence }) => evidence.researchEvidence.length) ? [EVIDENCE_SOURCES.pubmed] : []), ...(refluxEnabled ? [EVIDENCE_SOURCES.niddkGerd] : [])],
   };
 }
