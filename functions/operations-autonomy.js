@@ -54,19 +54,42 @@ export function assessOperationHealth(operationId, record = {}, now = Date.now()
   return { operationId, label: expected.label, healthy: true, reason: "healthy", ageHours };
 }
 
-export function summarizeAutonomyHealth({ operations = {}, unresolvedIncidents = 0, failedMail = 0, now = Date.now() } = {}) {
+export function assessGenerationReliability(metrics = {}, { minimumRequests = 4, maximumFailureRate = 0.5 } = {}) {
+  const services = ["smartSmoothie", "smartMealPlan", "astraGuide"];
+  const checks = services.map((service) => {
+    const values = metrics[service] || {};
+    const generated = Math.max(0, Number(values.generated || 0));
+    const validationFailed = Math.max(0, Number(values.validationFailed || 0));
+    const serviceFailed = Math.max(0, Number(values.serviceFailed || 0));
+    const total = generated + validationFailed + serviceFailed;
+    const failures = validationFailed + serviceFailed;
+    const failureRate = total ? failures / total : 0;
+    return { service, generated, validationFailed, serviceFailed, total, failureRate,
+      healthy: total < minimumRequests || failureRate < maximumFailureRate };
+  });
+  return {
+    healthy: checks.every((check) => check.healthy),
+    checks,
+    attention: checks.filter((check) => !check.healthy)
+      .map((check) => `${check.service}: ${check.validationFailed} validation and ${check.serviceFailed} service failures in ${check.total} requests`),
+  };
+}
+
+export function summarizeAutonomyHealth({ operations = {}, unresolvedIncidents = 0, failedMail = 0, generationReliability = null, now = Date.now() } = {}) {
   const checks = Object.keys(EXPECTED_AUTONOMY_OPERATIONS)
     .map((operationId) => assessOperationHealth(operationId, operations[operationId], now));
   const attention = [
     ...checks.filter((check) => !check.healthy).map((check) => `${check.label}: ${check.reason}`),
     ...(unresolvedIncidents ? [`${unresolvedIncidents} unresolved AI service incident(s)`] : []),
     ...(failedMail ? [`${failedMail} email delivery failure(s) awaiting intervention`] : []),
+    ...(generationReliability && !generationReliability.healthy ? generationReliability.attention : []),
   ];
   return {
     status: attention.length ? "attention-required" : "healthy",
     checks,
     unresolvedIncidents,
     failedMail,
+    generationReliability,
     attention,
   };
 }

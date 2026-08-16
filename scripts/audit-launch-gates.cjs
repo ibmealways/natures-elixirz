@@ -10,7 +10,9 @@ const firestore = new Client({ urlPrefix: "https://firestore.googleapis.com", ap
 const functions = new Client({ urlPrefix: "https://cloudfunctions.googleapis.com", apiVersion: "v2" });
 const secrets = new Client({ urlPrefix: "https://secretmanager.googleapis.com", apiVersion: "v1" });
 const documentsPath = `/projects/${projectId}/databases/(default)/documents`;
-const scalar = (value) => value?.stringValue ?? value?.integerValue ?? value?.booleanValue ?? value?.timestampValue ?? null;
+const scalar = (value) => value?.mapValue
+  ? Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([key, nested]) => [key, scalar(nested)]))
+  : value?.stringValue ?? value?.integerValue ?? value?.doubleValue ?? value?.booleanValue ?? value?.timestampValue ?? null;
 const fields = (document) => Object.fromEntries(Object.entries(document?.fields || {}).map(([key, value]) => [key, scalar(value)]));
 
 async function document(path) {
@@ -23,10 +25,12 @@ async function collection(path, pageSize = 500) {
 }
 
 async function main() {
-  const [stripe, backup, autonomy, incidents, mail, ledger, deployed, stripeKeySecret, stripePricesSecret, stripeWebhookSecret] = await Promise.all([
+  const metricDay = new Date().toISOString().slice(0, 10);
+  const [stripe, backup, autonomy, generationMetrics, incidents, mail, ledger, deployed, stripeKeySecret, stripePricesSecret, stripeWebhookSecret] = await Promise.all([
     document("systemOperations/stripeEntitlementReconciliation"),
     document("systemOperations/firestoreBackupValidation"),
     document("systemOperations/autonomyHealthMonitor"),
+    document(`systemMetrics/generation-${metricDay}`),
     collection("systemIncidents", 200), collection("mail", 500), collection("subscriptionLedger", 500),
     functions.get(`/projects/${projectId}/locations/us-central1/functions?pageSize=200`),
     secrets.get(`/projects/${projectId}/secrets/STRIPE_SECRET_KEY/versions/latest:access`),
@@ -86,6 +90,7 @@ async function main() {
   const report = {
     auditedAt: new Date().toISOString(),
     operations: { stripeEntitlementReconciliation: operation(stripe), firestoreBackupValidation: operation(backup), autonomyHealthMonitor: operation(autonomy) },
+    generationReliability: fields(generationMetrics),
     unresolvedIncidents, openIncidentSummaries, interventionMail, subscriptionLedgerStatusCounts: statusCounts,
     deployedFunctionCount: deployedNames.length, missingRequiredFunctions: missingFunctions,
     stripe: { mode: stripeMode, configuredPriceCount, expectedPriceCount: expectedPriceKeys.length, catalogComplete: configuredPriceCount === expectedPriceKeys.length, bindingMismatches },

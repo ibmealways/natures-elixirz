@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessOperationHealth, backupReadiness, newestReadyBackup, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
+import { assessGenerationReliability, assessOperationHealth, backupReadiness, newestReadyBackup, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
 
 test("Stripe reconciliation includes recoverable subscription states only", () => {
   assert.equal(shouldReconcileLedger({ id: "sub_1", uid: "user-1", status: "active" }), true);
@@ -61,4 +61,13 @@ test("autonomy summary includes operational, AI, and mail attention", () => {
   });
   assert.equal(summary.status, "attention-required");
   assert.equal(summary.attention.length, 2);
+});
+
+test("generation reliability ignores tiny samples and flags sustained fallback rates", () => {
+  assert.equal(assessGenerationReliability({ smartMealPlan: { validationFailed: 1 } }).healthy, true);
+  const reliability = assessGenerationReliability({ smartMealPlan: { generated: 2, validationFailed: 2, serviceFailed: 1 } });
+  assert.equal(reliability.healthy, false);
+  assert.match(reliability.attention[0], /smartMealPlan/);
+  const summary = summarizeAutonomyHealth({ generationReliability: reliability });
+  assert.equal(summary.status, "attention-required");
 });

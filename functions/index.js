@@ -19,7 +19,7 @@ import { assessHighRiskNutritionProfile } from "./nutrition-foundation.js";
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
-import { backupReadiness, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
+import { assessGenerationReliability, backupReadiness, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   astraReplySchema,
@@ -43,6 +43,20 @@ const youtubeDataApiSecret = defineSecret("YOUTUBE_DATA_API_KEY");
 const openaiModel = defineString("OPENAI_MODEL", { default: "gpt-5.6-terra" });
 const openaiImageModel = defineString("OPENAI_IMAGE_MODEL", { default: "gpt-image-2" });
 const enforceAppCheck = defineBoolean("ENFORCE_APP_CHECK", { default: false });
+
+async function recordGenerationOutcome(service, outcome) {
+  const allowedServices = new Set(["astraGuide", "smartSmoothie", "smartMealPlan"]);
+  const allowedOutcomes = new Set(["generated", "validationFailed", "serviceFailed"]);
+  if (!allowedServices.has(service) || !allowedOutcomes.has(outcome)) return;
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    await db.doc(`systemMetrics/generation-${day}`).set({
+      day, [service]: { [outcome]: FieldValue.increment(1) }, updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  } catch (error) {
+    logger.error("operations.generation_metric.failed", { service, outcome, message: error?.message });
+  }
+}
 const publicSignupMode = defineBoolean("PUBLIC_SIGNUP_MODE", { default: false });
 const VIP_FAMILY_OFFER_LIMIT = 5000;
 const VIP_FAMILY_SEAT_LIMIT = 2;
@@ -772,11 +786,14 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
       safety_identifier: createHash("sha256").update(request.auth.uid).digest("hex"),
       max_output_tokens: 900,
     });
-    return validateAstraReply(JSON.parse(response.output_text));
+    const reply = validateAstraReply(JSON.parse(response.output_text));
+    await recordGenerationOutcome("astraGuide", "generated");
+    return reply;
   } catch (error) {
     console.error("Astra Guide request failed", { status: error.status, code: error.code });
     try { await recordAiServiceIncident("astraGuide", request.auth.uid, error); }
     catch (incidentError) { logger.error("operations.incident_record.failed", { service: "astraGuide", message: incidentError?.message }); }
+    await recordGenerationOutcome("astraGuide", "serviceFailed");
     throw new HttpsError("unavailable", "Astra Guide is temporarily unavailable. Please try again.");
   }
 });
@@ -822,6 +839,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
         createdAt: FieldValue.serverTimestamp(),
       });
       logger.info("ai.smoothie_recipe.generated", { uid, ingredientCount: proposal.ingredients.length, attempt: attempt + 1 });
+      await recordGenerationOutcome("smartSmoothie", "generated");
       return { recipe: proposal, source: "openai", model: response.model || openaiModel.value() };
     } catch (error) {
       validationFeedback = `The prior proposal failed application validation: ${String(error.message || "invalid recipe").slice(0, 240)}. Create a different corrected recipe.`;
@@ -831,6 +849,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
           try { await recordAiServiceIncident("smartSmoothie", uid, error, { attempts: 2 }); }
           catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartSmoothie", message: incidentError?.message }); }
         }
+        await recordGenerationOutcome("smartSmoothie", shouldRecordAiServiceIncident(error) ? "serviceFailed" : "validationFailed");
         throw new HttpsError("unavailable", "AI smoothie generation could not produce a validated recipe. A clearly labeled fallback can still be used.");
       }
     }
@@ -871,6 +890,7 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
       const plan = validateMealPlanProposal(JSON.parse(response.output_text), context);
       await db.collection(`users/${uid}/mealPlanAiHistory`).add({ goal: context.goal, days: context.days, summary: response.output_text.slice(0, 500), createdAt: FieldValue.serverTimestamp() });
       logger.info("ai.meal_plan.generated", { uid, goal: context.goal, days: context.days, attempt: attempt + 1 });
+      await recordGenerationOutcome("smartMealPlan", "generated");
       return { plan, nutritionIntelligence: summarizeMealPlanIntelligence(plan, context), medicationSafety: JSON.parse(response.output_text).medicationSafety, source: "openai", model: response.model || openaiModel.value() };
     } catch (error) {
       const failureReason = String(error.message || "invalid plan").slice(0, 300);
@@ -882,6 +902,7 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
           try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 3, days: context.days, validationFailures }); }
           catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
         }
+        await recordGenerationOutcome("smartMealPlan", shouldRecordAiServiceIncident(error) ? "serviceFailed" : "validationFailed");
         throw new HttpsError("unavailable", "AI meal planning could not produce a validated plan. A clearly labeled rules-based backup can still be shown.");
       }
     }
@@ -1531,12 +1552,15 @@ export const monitorAutonomyHealth = onSchedule({
   const lease = await acquireOperationLease("autonomyHealthMonitor", 15);
   if (!lease) return;
   try {
-    const [stripeSnapshot, backupSnapshot, incidentSnapshot, failedMailSnapshot] = await Promise.all([
+    const metricDay = new Date().toISOString().slice(0, 10);
+    const [stripeSnapshot, backupSnapshot, incidentSnapshot, failedMailSnapshot, generationMetricSnapshot] = await Promise.all([
       db.doc("systemOperations/stripeEntitlementReconciliation").get(),
       db.doc("systemOperations/firestoreBackupValidation").get(),
       db.collection("systemIncidents").where("status", "==", "open").limit(100).get(),
       db.collection("mail").where("autonomy.action", "==", "alert").limit(100).get(),
+      db.doc(`systemMetrics/generation-${metricDay}`).get(),
     ]);
+    const generationReliability = assessGenerationReliability(generationMetricSnapshot.data() || {});
     const summary = summarizeAutonomyHealth({
       operations: {
         stripeEntitlementReconciliation: stripeSnapshot.data() || {},
@@ -1544,6 +1568,7 @@ export const monitorAutonomyHealth = onSchedule({
       },
       unresolvedIncidents: incidentSnapshot.size,
       failedMail: failedMailSnapshot.size,
+      generationReliability,
     });
     await finishOperation(lease, summary);
     if (summary.status === "attention-required") {
