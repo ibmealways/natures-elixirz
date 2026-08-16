@@ -114,7 +114,13 @@ export default function AstraGuide() {
   }, [storageScope]);
 
   useEffect(() => {
-    saveAstraConversation(messages, storageScope);
+    // A cloud restore publishes a fresh array even when its messages are identical.
+    // Writing that unchanged array back to local storage emits another cloud-change
+    // event and can otherwise create an endless Firestore restore/write cycle.
+    const storedMessages = getAstraConversation(storageScope);
+    if (JSON.stringify(storedMessages) !== JSON.stringify(messages)) {
+      saveAstraConversation(messages, storageScope);
+    }
   }, [messages, storageScope]);
 
   useEffect(() => {
