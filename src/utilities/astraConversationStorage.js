@@ -1,4 +1,5 @@
 import { notifyCloudChange } from "./cloudChange";
+import { sanitizeAstraKernelTransfer } from "./astraKernelTransfer";
 
 const PREFIX = "naturesElixirz.astraConversation.v1";
 const MAX_MESSAGES = 40;
@@ -9,11 +10,15 @@ const keyFor = (scope = "guest") => `${PREFIX}.${scope}`;
 function sanitizeMessages(messages = []) {
   return (Array.isArray(messages) ? messages : [])
     .filter((message) => ["user", "assistant"].includes(message?.role) && String(message?.content || "").trim())
-    .map((message) => ({
-      role: message.role,
-      content: String(message.content).slice(0, MAX_CONTENT_LENGTH),
-      createdAt: message.createdAt || new Date().toISOString(),
-    }))
+    .map((message) => {
+      const transfer = message.role === "assistant" ? sanitizeAstraKernelTransfer(message.transfer) : null;
+      return {
+        role: message.role,
+        content: String(message.content).slice(0, MAX_CONTENT_LENGTH),
+        ...(transfer ? { transfer } : {}),
+        createdAt: message.createdAt || new Date().toISOString(),
+      };
+    })
     .slice(-MAX_MESSAGES);
 }
 

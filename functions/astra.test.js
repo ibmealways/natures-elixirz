@@ -23,6 +23,13 @@ test("a confirmation retains the preceding Kernel transfer requirement", () => {
   }), "smoothie");
 });
 
+test("a missing-review complaint retries the preceding Kernel transfer", () => {
+  assert.equal(requiredKernelTransferType({
+    message: "I don't see anything for me to review in Smoothies Kernel.",
+    history: [{ role: "user", content: "Send this smoothie ingredients over to Smoothies Kernel." }],
+  }), "smoothie");
+});
+
 test("conversation validation trims and limits history", () => {
   const result = validateConversation({
     message: "  Make a focus smoothie  ",

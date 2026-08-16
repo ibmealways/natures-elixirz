@@ -96,7 +96,8 @@ export function requiredKernelTransferType(conversation = {}) {
   const direct = classify(message);
   if (direct) return direct;
   const isConfirmation = /^(yes|yeah|yep|ok|okay|please|do it|yes[, ]+do that|go ahead)\b/.test(message.trim());
-  if (!isConfirmation) return null;
+  const isMissingProposalComplaint = /\b(don't|do not|can't|cannot|isn't|is not|nothing|no)\b.*\b(see|find|appear|show|review|proposal|transfer|kernel)\b|\b(nothing|no proposal|no transfer)\b.*\b(appear|show|review|kernel)\b/.test(message);
+  if (!isConfirmation && !isMissingProposalComplaint) return null;
   for (const prior of recentUserMessages.reverse()) {
     const contextual = classify(prior);
     if (contextual) return contextual;

@@ -14,4 +14,3 @@ describe("Astra Guide preview", () => {
     expect(reply).toContain("not diagnosis or treatment");
   });
 });
-
