@@ -30,6 +30,7 @@ import {
   isActiveTierOne,
   validateConversation,
   validateAstraReply,
+  requiredKernelTransferType,
 } from "./astra.js";
 
 initializeApp();
@@ -777,16 +778,26 @@ export const askAstraGuide = onCall({ secrets: [openaiSecret], timeoutSeconds: 6
 
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   try {
-    const response = await client.responses.create({
+    const requiredTransferType = requiredKernelTransferType(conversation);
+    const createAstraResponse = (retry = false) => client.responses.create({
       model: openaiModel.value(),
-      instructions: ASTRA_SYSTEM_INSTRUCTIONS,
-      input,
+      instructions: `${ASTRA_SYSTEM_INSTRUCTIONS}${requiredTransferType ? `\n\nSERVER TRANSFER REQUIREMENT: This turn explicitly requires a ${requiredTransferType} transfer proposal. The transfer.type MUST be \"${requiredTransferType}\" and must contain the exact recipe and quantities already discussed. Do not return type \"none\".` : ""}`,
+      input: retry ? [...input, { role: "user", content: `Your prior result omitted the required ${requiredTransferType} transfer object. Return the complete structured transfer now; do not merely claim it is ready.` }] : input,
       reasoning: { effort: "low" },
       text: { verbosity: "medium", format: { type: "json_schema", name: "astra_reply", strict: true, schema: astraReplySchema } },
       safety_identifier: createHash("sha256").update(request.auth.uid).digest("hex"),
       max_output_tokens: 900,
     });
-    const reply = validateAstraReply(JSON.parse(response.output_text));
+    let response = await createAstraResponse();
+    let reply = validateAstraReply(JSON.parse(response.output_text));
+    if (requiredTransferType && reply.transfer?.type !== requiredTransferType) {
+      logger.warn("astra.transfer.retry", { uid: request.auth.uid, requiredTransferType });
+      response = await createAstraResponse(true);
+      reply = validateAstraReply(JSON.parse(response.output_text));
+    }
+    if (requiredTransferType && reply.transfer?.type !== requiredTransferType) {
+      throw new Error(`Astra did not create the required ${requiredTransferType} transfer proposal.`);
+    }
     await recordGenerationOutcome("astraGuide", "generated");
     return reply;
   } catch (error) {

@@ -78,6 +78,32 @@ export function validateAstraReply(value = {}) {
   return { reply, transfer };
 }
 
+export function requiredKernelTransferType(conversation = {}) {
+  const message = String(conversation.message || "").toLowerCase();
+  const recentUserMessages = (Array.isArray(conversation.history) ? conversation.history : [])
+    .filter((item) => item?.role === "user")
+    .slice(-4)
+    .map((item) => String(item.content || "").toLowerCase());
+  const actionPattern = /\b(send|move|transfer|put|place|open|use|bring)\b/;
+  const smoothiePattern = /\b(smoothie|smoothies)\b.*\b(kernel|lab)\b|\b(kernel|lab)\b.*\b(smoothie|smoothies)\b/;
+  const mealPattern = /\b(meal|meals|meal plan|meal plans)\b.*\b(kernel|lab)\b|\b(kernel|lab)\b.*\b(meal|meals|meal plan|meal plans)\b/;
+  const classify = (text) => {
+    if (!actionPattern.test(text)) return null;
+    if (smoothiePattern.test(text)) return "smoothie";
+    if (mealPattern.test(text)) return "meal_plan";
+    return null;
+  };
+  const direct = classify(message);
+  if (direct) return direct;
+  const isConfirmation = /^(yes|yeah|yep|ok|okay|please|do it|yes[, ]+do that|go ahead)\b/.test(message.trim());
+  if (!isConfirmation) return null;
+  for (const prior of recentUserMessages.reverse()) {
+    const contextual = classify(prior);
+    if (contextual) return contextual;
+  }
+  return null;
+}
+
 function validateAttachments(value) {
   if (!Array.isArray(value)) return [];
   if (value.length > 3) throw new Error("A maximum of 3 attachments is allowed.");

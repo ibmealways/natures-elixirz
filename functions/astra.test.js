@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildJourneyContext, buildKernelContext, buildProfileContext, hasTierAccess, isActiveTierOne, validateAstraReply, validateConversation } from "./astra.js";
+import { buildJourneyContext, buildKernelContext, buildProfileContext, hasTierAccess, isActiveTierOne, requiredKernelTransferType, validateAstraReply, validateConversation } from "./astra.js";
 
 test("Astra reply validation preserves an explicit Kernel transfer", () => {
   const result = validateAstraReply({ reply: "Ready for review.", transfer: { type: "smoothie", ingredients: [{ name: "Pear" }, { name: "Spinach" }, { name: "Hemp seeds" }, { name: "Soy milk" }, { name: "Ginger" }] } });
@@ -10,6 +10,17 @@ test("Astra reply validation preserves an explicit Kernel transfer", () => {
 
 test("Astra reply validation treats no transfer as ordinary chat", () => {
   assert.deepEqual(validateAstraReply({ reply: "General guidance.", transfer: { type: "none" } }), { reply: "General guidance.", transfer: null });
+});
+
+test("explicit Smoothie Kernel requests require a structured transfer", () => {
+  assert.equal(requiredKernelTransferType({ message: "Send this smoothie over to Smoothies Kernel." }), "smoothie");
+});
+
+test("a confirmation retains the preceding Kernel transfer requirement", () => {
+  assert.equal(requiredKernelTransferType({
+    message: "Yes do that now please.",
+    history: [{ role: "user", content: "Send this smoothie ingredients over to Smoothies Kernel." }],
+  }), "smoothie");
 });
 
 test("conversation validation trims and limits history", () => {
