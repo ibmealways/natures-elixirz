@@ -20,12 +20,25 @@ const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_RECAPTCHA_ENTERPR
 
 // App Check begins sending attestations as soon as a site key is configured.
 // Backend enforcement is enabled separately after legitimate-traffic metrics are reviewed.
-export const appCheck = app && appCheckSiteKey && typeof window !== "undefined"
-  ? initializeAppCheck(app, {
-    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-    isTokenAutoRefreshEnabled: true,
-  })
-  : null;
+// App Check is a protective layer, so a provider/configuration failure must never prevent
+// the application shell from loading while enforcement is still disabled.
+function safelyInitializeAppCheck() {
+  if (!app || !appCheckSiteKey || typeof window === "undefined") return null;
+
+  try {
+    return initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (error) {
+    console.error("Firebase App Check initialization failed; continuing without attestation.", {
+      code: error?.code || "app-check-initialization-failed",
+    });
+    return null;
+  }
+}
+
+export const appCheck = safelyInitializeAppCheck();
 
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
