@@ -1,4 +1,5 @@
 import { findIngredientEvidence, ingredientEvidenceSummary, refluxProfileEnabled } from "./ingredient-evidence.js";
+import { evaluateHumanNourishmentMatrix } from "./human-nourishment-matrix.js";
 
 const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -107,8 +108,9 @@ export function assessNutritionSelection({ ingredients = [], profile = {}, goals
     ...(brief.professionalReviewRequired ? [brief.reviewReason] : []),
   ];
   const evidence = ingredientEvidenceSummary(ingredients, profile, nutritionLabels);
+  const nourishmentMatrix = evaluateHumanNourishmentMatrix(ingredients);
   return {
-    version: "nutrition-intelligence-v1",
+    version: "nutrition-intelligence-v2",
     kind,
     goalFitScore: Math.max(0, Math.min(100, goalFitScore)),
     matchedPatterns: [...requiredMet, ...helpfulMet],
@@ -118,6 +120,7 @@ export function assessNutritionSelection({ ingredients = [], profile = {}, goals
     requiresProfessionalReview: brief.professionalReviewRequired,
     evidenceLevel: "ingredient-pattern screening",
     evidence,
+    nourishmentMatrix,
     explanation: prohibitedMatches.length
       ? "This selection conflicts with a saved allergy or avoidance and must not be used."
       : `This ${kind} matches ${requiredMet.length} of ${brief.targetPatterns.length} priority nutrition patterns and ${helpfulMet.length} supporting patterns selected for this subscriber.`,

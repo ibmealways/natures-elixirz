@@ -28,7 +28,7 @@ describe("meal plan AI contract", () => {
     assert.equal(plan[0].meals.length, 5);
     assert.equal(plan[0].meals[0].ingredients[0].availability, "on-hand");
     assert.equal(plan[0].meals[0].generationSource, "openai");
-    assert.equal(plan[0].meals[0].nutritionIntelligence.version, "nutrition-intelligence-v1");
+    assert.equal(plan[0].meals[0].nutritionIntelligence.version, "nutrition-intelligence-v2");
     assert.ok(plan[0].dailyGoalFit >= 35);
   });
 

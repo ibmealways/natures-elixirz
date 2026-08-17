@@ -44,5 +44,5 @@ test("AI smoothie validator accepts and rounds a distinct balanced proposal", ()
   const context = buildSmoothieAiContext({}, {}, [], {});
   const validated = validateSmoothieProposal({ ...baseProposal, ingredients: baseProposal.ingredients.map((item, index) => index ? item : { ...item, amount: 0.51 }) }, context);
   assert.equal(validated.ingredients[0].amount, 0.5);
-  assert.equal(validated.nutritionIntelligence.version, "nutrition-intelligence-v1");
+  assert.equal(validated.nutritionIntelligence.version, "nutrition-intelligence-v2");
 });
