@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AudioLines, CreditCard, Crown, GlassWater, PersonStanding, RefreshCcw, Sparkles, UtensilsCrossed } from "lucide-react";
+import { AudioLines, Check, CreditCard, Crown, GlassWater, PersonStanding, RefreshCcw, Sparkles, UtensilsCrossed } from "lucide-react";
 import { tiers } from "../data/premiumData";
 import GlowNav from "../components/GlowNav";
 import { useSubscriber } from "../context/SubscriberContext";
@@ -35,6 +35,8 @@ export default function PremiumPortal() {
   const [selectedKernels, setSelectedKernels] = useState(["smoothies"]);
   const activeMembership = ["active", "trialing"].includes(profile.subscriptionStatus);
   const hasStripeBilling = profile.subscriptionAccessSource === "stripe";
+  const selectedKernelCount = selectedKernels.length;
+  const selectionLevel = selectedKernelCount === 4 ? "Whole Life" : selectedKernelCount ? `Level ${selectedKernelCount}` : "No level selected";
 
   const recoverMembership = async (automatic = false) => {
     if (!user) return;
@@ -145,8 +147,13 @@ export default function PremiumPortal() {
           <div className="kernel-picker__choices">
             {kernelChoices.map(({ id, name, description, icon: Icon }) => {
               const selected = selectedKernels.includes(id);
-              return <button key={id} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} onClick={() => setSelectedKernels((current) => selected ? current.filter((item) => item !== id) : [...current, id])}><Icon size={20} /><span><strong>{name}</strong><small>{description}</small></span></button>;
+              return <button key={id} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} onClick={() => setSelectedKernels((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}><Icon size={20} /><span><strong>{name}</strong><small>{description}</small></span><i className="kernel-picker__check" aria-hidden="true">{selected && <Check size={17} strokeWidth={3} />}</i></button>;
             })}
+            <div className="kernel-picker__status" role="status" aria-live="polite">
+              <div><strong>{selectedKernelCount} of 4 Kernels selected</strong><span>{selectionLevel}{selectedKernelCount ? ` · $${selectedKernelCount === 4 ? "59.99" : ["15.99", "29.99", "44.99"][selectedKernelCount - 1]}/month` : ""}</span></div>
+              <div><button type="button" onClick={() => setSelectedKernels(kernelChoices.map(({ id }) => id))}>Select all</button><button type="button" onClick={() => setSelectedKernels([])}>Clear</button></div>
+            </div>
+            {activeMembership && Number(profile.tier) === 5 && <p className="kernel-picker__vip-note"><Crown size={18} /> You have complete V.I.P. access. These controls are available as a membership-builder preview; testing selections here will not remove or reduce your current access.</p>}
           </div>
         </section>
 

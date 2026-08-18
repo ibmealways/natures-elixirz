@@ -8,4 +8,12 @@
 .kernel-picker__choices button.is-selected { border-color: #5be8cf; box-shadow: 0 0 24px rgba(91, 232, 207, .25); background: rgba(11, 88, 76, .35); }
 .kernel-picker__choices span { display: grid; gap: .3rem; }
 .kernel-picker__choices small { color: #a9bcbc; line-height: 1.4; }
+.kernel-picker__check { width: 1.55rem; height: 1.55rem; margin-left: auto; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(91, 232, 207, .45); border-radius: 999px; color: #001b19; background: rgba(91, 232, 207, .08); }
+.kernel-picker__choices button.is-selected .kernel-picker__check { background: #5be8cf; box-shadow: 0 0 16px rgba(91, 232, 207, .7); }
+.kernel-picker__status { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; border: 1px solid rgba(101, 213, 255, .35); border-radius: 1rem; background: rgba(8, 28, 48, .85); }
+.kernel-picker__status > div:first-child { display: grid; gap: .25rem; }
+.kernel-picker__status > div:first-child span { color: #74e7ff; }
+.kernel-picker__status > div:last-child { display: flex; gap: .5rem; }
+.kernel-picker__status button { padding: .55rem .8rem; font-size: .82rem; }
+.kernel-picker__vip-note { grid-column: 1 / -1; display: flex; gap: .65rem; align-items: center; margin: 0; padding: .9rem 1rem; color: #eadfff; border: 1px solid rgba(177, 130, 255, .42); border-radius: 1rem; background: rgba(64, 35, 105, .34); }
 @media (max-width: 720px) { .kernel-picker__choices { grid-template-columns: 1fr; } }
