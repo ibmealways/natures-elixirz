@@ -22,7 +22,7 @@ describe("nutrition intelligence engine", () => {
     const restricted = assessNutritionSelection({ profile: { allergies: "Peanut" }, ingredients: [{ name: "Peanut butter" }] });
     assert.throws(() => assertNutritionSafety(restricted), /saved restriction/i);
     const duplicate = assessNutritionSelection({ ingredients: [{ name: "Spinach" }, { name: "spinach" }] });
-    assert.throws(() => assertNutritionSafety(duplicate), /duplicate/i);
+    assert.throws(() => assertNutritionSafety(duplicate), /duplicate ingredients in one dish: spinach/i);
   });
 
   it("flags unreasonable household portions", () => {

@@ -133,8 +133,9 @@ export function assertNutritionSafety(assessment) {
     const first = assessment.prohibitedMatches[0];
     throw new Error(`The proposal included ${first.ingredient}, which conflicts with the saved restriction ${first.restriction}.`);
   }
-  if (assessment.warnings.some((warning) => warning.startsWith("Duplicate ingredients:"))) {
-    throw new Error("The proposal contained duplicate ingredients.");
+  const duplicateWarning = assessment.warnings.find((warning) => warning.startsWith("Duplicate ingredients:"));
+  if (duplicateWarning) {
+    throw new Error(`The proposal contained duplicate ingredients in one dish: ${duplicateWarning.replace(/^Duplicate ingredients:\s*/, "")}`);
   }
   if (assessment.warnings.some((warning) => /more than \d/.test(warning))) {
     throw new Error(`The proposal contained an unreasonable quantity: ${assessment.warnings.find((warning) => /more than \d/.test(warning))}`);

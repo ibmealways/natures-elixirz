@@ -194,6 +194,7 @@ Requirements:
 - Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
 - Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner.
+- Within each dish, list each normalized ingredient exactly once. Do not repeat an ingredient as separate rows; one ingredient row must contain its complete quantity.
 - Every day must use a different culinary format for Breakfast, Lunch, Snack, and Dinner. Changing only the fruit, vegetable, yogurt flavor, seasoning, or side does not create a different dish. For example, do not repeat eggs with toast on multiple days, tuna sandwiches on multiple days, yogurt cups on multiple days, or fried rice on multiple days.
 - Across a multi-day plan, rotate cooking methods and recognizable formats such as an omelet, oatmeal, parfait, toast, soup, wrap, grain bowl, salad, roasted plate, skillet, and baked snack while keeping each choice appropriate to its meal occasion.
 - Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, pinch, oz, piece, or count. Do not use decimals.
