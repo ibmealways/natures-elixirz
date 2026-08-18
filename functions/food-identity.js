@@ -47,7 +47,9 @@ const canonicalUnit = (value) => {
   if (["tbsp", "tablespoon", "tablespoons"].includes(unit)) return "tbsp";
   if (["tsp", "teaspoon", "teaspoons"].includes(unit)) return "tsp";
   if (["pinch", "pinches"].includes(unit)) return "pinch";
-  if (["egg", "eggs", "large", "each", "item", "items"].includes(unit)) return "each";
+  // Produce is commonly described by size (for example, "1 medium kiwi").
+  // Keep the original text for display, but validate size words as whole items.
+  if (["egg", "eggs", "small", "medium", "large", "each", "item", "items"].includes(unit)) return "each";
   if (["count", "counts"].includes(unit)) return "count";
   if (["piece", "pieces"].includes(unit)) return "piece";
   if (["slice", "slices"].includes(unit)) return "slice";

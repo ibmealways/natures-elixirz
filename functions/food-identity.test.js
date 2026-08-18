@@ -24,6 +24,9 @@ describe("USDA food identity registry", () => {
   it("parses meal-plan fraction strings and uses preparation-specific weights", () => {
     assert.deepEqual(parseHouseholdQuantity({ quantity: "1/2 cup cooked" }), { amount: 0.5, unit: "cup" });
     assert.deepEqual(parseHouseholdQuantity({ quantity: "1 pinch" }), { amount: 1, unit: "pinch" });
+    assert.deepEqual(parseHouseholdQuantity({ quantity: "1 1/8 medium" }), { amount: 1.125, unit: "each" });
+    assert.deepEqual(parseHouseholdQuantity({ quantity: "1 small" }), { amount: 1, unit: "each" });
+    assert.deepEqual(parseHouseholdQuantity({ quantity: "1 large" }), { amount: 1, unit: "each" });
     const serving = normalizeIngredientMass({ quantity: "1/2 cup cooked" }, foodIdentityFor("cooked quinoa"));
     assert.equal(serving.grams, 92.5);
     assert.equal(serving.fdcId, 168917);

@@ -9,6 +9,12 @@ describe("meal quantity validation", () => {
     assert.equal(validateMealIngredientQuantity({ name: "black pepper", quantity: "1 pinch" }).unit, "pinch");
   });
 
+  it("accepts mixed-fraction size-qualified whole produce", () => {
+    const result = validateMealIngredientQuantity({ name: "Kiwi", quantity: "1 1/8 medium" });
+    assert.equal(result.amount, 1.125);
+    assert.equal(result.unit, "each");
+  });
+
   it("rejects ambiguous, decimal, unknown, and excessive quantities", () => {
     assert.throws(() => validateMealIngredientQuantity({ name: "nuts", quantity: "a handful" }), /Unrecognized|Ambiguous/);
     assert.throws(() => validateMealIngredientQuantity({ name: "rice", quantity: "1.5 cup" }), /Decimal/);
