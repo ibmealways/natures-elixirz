@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildMealPlanContext, buildMealPlanInstructions, validateMealPlanProposal } from "./meal-plan-ai.js";
+import { buildMealPlanContext, buildMealPlanInstructions, normalizeSmoothieHandoffIngredients, validateMealPlanProposal } from "./meal-plan-ai.js";
 
 const DEFAULT_DISHES = { Smoothie: "Berry protein smoothie", Breakfast: "Egg and brown rice breakfast bowl", Lunch: "Chicken and brown rice bowl", Snack: "Berry yogurt snack bowl", Dinner: "Chicken and brown rice dinner plate" };
 const DEFAULT_INGREDIENTS = {
@@ -69,6 +69,35 @@ describe("meal plan AI contract", () => {
     assert.equal(plan[0].meals[0].food, "Dragon Fruit Apple Golden Protein Smoothie");
     assert.deepEqual(plan[0].meals[0].ingredients.map((item) => item.name), ["Dragon fruit", "Hemp protein"]);
     assert.deepEqual(plan[0].meals[0].ingredients.map((item) => item.quantity), ["3/4 cup", "1 1/8 scoop"]);
+  });
+
+  it("coalesces duplicate ingredients in an immutable Smoothie Kernel handoff", () => {
+    const ingredients = normalizeSmoothieHandoffIngredients([
+      { name: "Coconut water", amount: 1, unit: "cup" },
+      { name: "Coconut Water", amount: 0.5, unit: "cup" },
+      { name: "Hemp protein", amount: 1, unit: "scoop" },
+    ]);
+    assert.deepEqual(ingredients, [
+      { name: "Coconut water", quantity: "1 1/2 cup" },
+      { name: "Hemp protein", quantity: "1 scoop" },
+    ]);
+  });
+
+  it("does not let a duplicate paired-smoothie ingredient create an impossible retry loop", () => {
+    const context = buildMealPlanContext({}, { goal: "muscles", days: 1, crossTierContext: { smoothie: {
+      recipeName: "Coconut Berry Protein Smoothie",
+      ingredients: [
+        { name: "Coconut water", amount: 1, unit: "cup" },
+        { name: "Coconut water", amount: 0.5, unit: "cup" },
+        { name: "Hemp protein", amount: 1, unit: "scoop" },
+      ],
+    } } });
+    const proposal = { summary: "Paired plan.", days: [{ day: 1, meals: [meal("Smoothie", "Generic smoothie"), ...["Breakfast", "Lunch", "Snack", "Dinner"].map((type) => meal(type, `${type} option`))] }] };
+    const plan = validateMealPlanProposal(proposal, context);
+    assert.deepEqual(plan[0].meals[0].ingredients.map(({ name, quantity }) => ({ name, quantity })), [
+      { name: "Coconut water", quantity: "1 1/2 cup" },
+      { name: "Hemp protein", quantity: "1 scoop" },
+    ]);
   });
 
   it("rejects a disconnected savory breakfast with unrelated sweet components", () => {

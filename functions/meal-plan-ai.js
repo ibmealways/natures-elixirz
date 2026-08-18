@@ -78,6 +78,48 @@ export function formatTierOneQuantity(item = {}) {
   return `${whole || ""}${whole && fraction ? " " : ""}${fraction} ${unit}`.trim();
 }
 
+const smoothieIngredientKey = (value) => String(value || "")
+  .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function normalizeSmoothieHandoffIngredients(items = []) {
+  const normalized = [];
+  const positions = new Map();
+  for (const rawItem of (Array.isArray(items) ? items : []).slice(0, 24)) {
+    const item = typeof rawItem === "string" ? { name: rawItem } : (rawItem || {});
+    const name = String(item.name || "").trim().slice(0, 120);
+    if (!name) continue;
+    const amount = Number(item.amount);
+    const unit = String(item.unit || "").trim();
+    const key = smoothieIngredientKey(name);
+    const existingIndex = positions.get(key);
+    if (existingIndex === undefined) {
+      positions.set(key, normalized.length);
+      normalized.push({
+        name,
+        amount: Number.isFinite(amount) && amount > 0 ? amount : null,
+        unit,
+        quantity: formatTierOneQuantity(item).slice(0, 40),
+      });
+      continue;
+    }
+
+    const existing = normalized[existingIndex];
+    if (existing.amount !== null && Number.isFinite(amount) && amount > 0 &&
+        smoothieIngredientKey(existing.unit) === smoothieIngredientKey(unit)) {
+      existing.amount += amount;
+      existing.quantity = formatTierOneQuantity({ amount: existing.amount, unit: existing.unit }).slice(0, 40);
+      continue;
+    }
+
+    // Exact duplicate legacy entries are safely collapsed. Incompatible units remain
+    // explicit so corrupt upstream data is never silently converted.
+    const quantity = formatTierOneQuantity(item).slice(0, 40);
+    if (existing.quantity === quantity) continue;
+    normalized.push({ name, amount: Number.isFinite(amount) && amount > 0 ? amount : null, unit, quantity });
+  }
+  return normalized.map(({ name, quantity }) => ({ name, quantity }));
+}
+
 export function buildMealPlanContext(profile = {}, request = {}) {
   const requestedDays = Math.min(7, Math.max(1, Number(request.days) || 1));
   const rawCrossTier = request.crossTierContext && typeof request.crossTierContext === "object"
@@ -113,10 +155,7 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       recipeName: String(rawSmoothie.recipeName || "").slice(0, 120),
       goal: String(rawSmoothie.goal || "").slice(0, 60),
       selectedGoals: cleanList(rawSmoothie.selectedGoals, 12),
-      ingredients: (rawSmoothie.ingredients || []).slice(0, 24).map((item) => ({
-        name: String(typeof item === "string" ? item : item?.name || "").trim().slice(0, 120),
-        quantity: formatTierOneQuantity(item).slice(0, 40),
-      })).filter((item) => item.name),
+      ingredients: normalizeSmoothieHandoffIngredients(rawSmoothie.ingredients),
       nutrition: rawSmoothie.nutrition && typeof rawSmoothie.nutrition === "object"
         ? {
             calories: Number(rawSmoothie.nutrition.calories) || 0,
