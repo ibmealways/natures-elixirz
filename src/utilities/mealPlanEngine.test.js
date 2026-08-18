@@ -137,6 +137,34 @@ describe("generateMealPlan", () => {
     if (accent) expect(accent.quantity).toBe("1 tbsp");
   });
 
+  it("treats black pepper as seasoning rather than a cup of vegetables", () => {
+    const plan = generateMealPlan({}, "metabolic", 7, { kitchenItems: ["Eggs", "Rice", "Chicken thighs", "Black Pepper", "Carrot", "Spinach", "Apple", "Greek yogurt", "Kiwi", "Chia seeds"] });
+    const pepper = plan.flatMap((day) => day.meals).flatMap((meal) => meal.ingredients).filter((item) => /black pepper/i.test(item.name));
+    expect(pepper.every((item) => /tsp|pinch/i.test(item.quantity))).toBe(true);
+  });
+
+  it("never serves canned tuna or savory packaged rice as breakfast", () => {
+    const plans = Array.from({ length: 12 }, (_, variationSeed) => generateMealPlan({}, "metabolic", 1, { kitchenItems: ["Canned Tuna", "Knorr Rice Sides", "Eggs", "Bread", "Apple", "Mixed berries", "Hemp seeds"], variationSeed }));
+    plans.forEach((plan) => expect(plan[0].meals.find((meal) => meal.meal === "Breakfast").food).not.toMatch(/tuna|knorr|rice sides/i));
+  });
+
+  it("does not add beans to a fruit yogurt snack", () => {
+    const plans = Array.from({ length: 12 }, (_, variationSeed) => generateMealPlan({}, "metabolic", 1, { kitchenItems: ["Greek yogurt", "Kiwi", "Mixed berries", "Chia seeds", "Beans", "Eggs", "Rice", "Spinach"], variationSeed }));
+    plans.forEach((plan) => {
+      const snack = plan[0].meals.find((meal) => meal.meal === "Snack");
+      if (/yogurt/i.test(snack.food)) expect(snack.ingredients.map((item) => item.name).join(" ")).not.toMatch(/beans?/i);
+    });
+  });
+
+  it("does not instruct subscribers to recook canned tuna", () => {
+    const plan = generateMealPlan({}, "general", 7, { kitchenItems: ["Canned Tuna", "Rice", "Spinach", "Carrot", "Apple", "Eggs", "Bread"] });
+    const tunaMeals = plan.flatMap((day) => day.meals).filter((meal) => /canned tuna/i.test(meal.food));
+    tunaMeals.forEach((meal) => {
+      expect(meal.instructions.join(" ")).not.toMatch(/145/);
+      expect(meal.instructions.join(" ")).toMatch(/already cooked|package directions/i);
+    });
+  });
+
   it("substitutes animal foods for vegan profiles", () => {
     const plan = generateMealPlan({ dietaryPattern: "vegan" }, "heart", 1);
     expect(plan[0].meals.some((meal) => meal.food.includes("salmon"))).toBe(false);

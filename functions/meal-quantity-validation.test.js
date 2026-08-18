@@ -19,4 +19,11 @@ describe("meal quantity validation", () => {
     const meals = Array.from({ length: 5 }, (_, index) => ({ ingredients: [{ name: `food ${index}`, quantity: "10 oz" }] }));
     assert.throws(() => validateMealDayQuantities(meals), /across the day/);
   });
+
+  it("rejects cup-sized and excessive concentrated seasonings", () => {
+    assert.throws(() => validateMealIngredientQuantity({ name: "Black Pepper", quantity: "1 cup" }), /seasoning quantity/);
+    assert.throws(() => validateMealIngredientQuantity({ name: "Sea salt", quantity: "2 tsp" }), /seasoning quantity/);
+    assert.doesNotThrow(() => validateMealIngredientQuantity({ name: "Black Pepper", quantity: "1 pinch" }));
+    assert.doesNotThrow(() => validateMealIngredientQuantity({ name: "Dried oregano", quantity: "1/2 tsp" }));
+  });
 });

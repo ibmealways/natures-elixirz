@@ -166,6 +166,7 @@ function recognizeKitchen(items = []) {
     const match = pantryCatalog.find((entry) => entry.aliases.some((alias) => alias === normalized)
       || entry.name.toLowerCase() === normalized);
     if (match) return { ...match, source };
+    if (/\b(black pepper|white pepper|sea salt|salt|cinnamon|turmeric|ginger|paprika|cumin|oregano|basil|thyme|rosemary|dill|parsley|garlic powder|onion powder|seasoning|spice)\b/.test(normalized)) return { name: source, group: "Spice", source };
     if (/egg|chicken|turkey|tuna|salmon|fish|steak|beef|pork|sausage|bacon|ground meat|ground beef/.test(normalized)) return { name: source, group: "Protein", source };
     if (/bread|toast|tortilla|waffle|pancake|rice|quinoa|pasta|potato/.test(normalized)) return { name: source, group: "Grain", source };
     if (/lettuce|pepper|onion|tomato|broccoli|carrot|zucchini|cabbage|asparagus|mushroom|beet|spinach|kale|celery|cucumber|squash|green bean|pea|okra|turnip|radish|eggplant/.test(normalized)) return { name: source, group: "Vegetable", source };
@@ -220,7 +221,8 @@ function goalAccentQuantity(name = "") {
 
 function accentFitsMoment(accent = "", moment = "") {
   const value = accent.toLowerCase();
-  if (moment === "Breakfast" || moment === "Snack") return true;
+  if (moment === "Snack") return !/beans?|lentils?|chickpeas?|tofu|tempeh|rice|potato|meat|chicken|fish|tuna/.test(value);
+  if (moment === "Breakfast") return !/beans?|lentils?|chickpeas?|fish|tuna|cold cuts?|pork ribs/.test(value);
   return !/oats?|nut butter|seed butter|plain yogurt|mixed berries|banana/.test(value);
 }
 
@@ -232,6 +234,7 @@ function chooseGoalAccent(goal, offset, moment) {
 
 function proteinPreparationInstruction(name = "") {
   const value = name.toLowerCase();
+  if (/canned tuna|canned salmon|canned chicken/.test(value)) return `Drain ${name} and serve it chilled or gently warmed; it is already cooked, so follow its package directions.`;
   if (/cold cuts?|deli|ham|pepperoni/.test(value)) return `Keep ${name} refrigerated and serve according to its ready-to-eat package directions; heat only if the label or subscriber preference calls for it.`;
   if (/chicken|turkey|poultry/.test(value)) return `Cook ${name} to 165°F (74°C).`;
   if (/ground meat|ground beef|ground pork/.test(value)) return `Cook ${name} to 160°F (71°C).`;
@@ -251,9 +254,9 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
     : moment === "Snack"
       ? /powder|collagen|cold cuts?|deli|pepperoni|chicken|turkey|pork|beef|steak|tuna|salmon|fish/
       : moment === "Breakfast"
-        ? /powder|collagen|cold cuts?|deli|pepperoni/
+        ? /powder|collagen|cold cuts?|deli|pepperoni|tuna|salmon|fish|pork ribs?|steak|ground meat|ground beef/
         : /powder|collagen/;
-  const grainReject = moment === "Lunch" || moment === "Dinner" ? /waffle|pancake|oats?/ : /$^/;
+  const grainReject = moment === "Lunch" || moment === "Dinner" ? /waffle|pancake|oats?/ : moment === "Breakfast" ? /knorr|rice sides?|mashed potato/ : /$^/;
   const protein = pickKitchen(available, ["Protein"], offset, proteinReject);
   const grain = pickKitchen(available, ["Grain"], offset + 1, grainReject);
   const vegetable = pickKitchen(available, ["Vegetable"], offset + 2);
@@ -263,8 +266,9 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const targetAccent = chooseGoalAccent(goal, offset, moment);
   const isWaffleBreakfast = moment === "Breakfast" && /waffle/i.test(grain?.name || "");
   const isSavoryProtein = /chicken|turkey|sausage|egg|tofu|tempeh/i.test(protein?.name || "");
+  const sweetBreakfast = moment === "Breakfast" && /yogurt|cottage cheese/i.test(protein?.name || "");
   const chosen = moment === "Breakfast"
-    ? [protein, grain, fruit || vegetable, isWaffleBreakfast && isSavoryProtein ? null : seed]
+    ? sweetBreakfast ? [protein, grain, fruit, seed] : [protein, grain, vegetable, fruit]
     : moment === "Lunch"
       ? [protein, grain, vegetable, secondVegetable]
       : moment === "Snack"
@@ -274,13 +278,17 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const hasGoalAccent = unique.some((item) => item.name.toLowerCase().includes(targetAccent.toLowerCase()) || targetAccent.toLowerCase().includes(item.name.toLowerCase()));
   const ingredients = unique.map((item) => ({ quantity: pantryQuantity(item), name: item.name, availability: "on-hand" }));
   const incompatibleWaffleAccent = isWaffleBreakfast && isSavoryProtein && /nut butter|seed butter/i.test(targetAccent);
-  if (!hasGoalAccent && !incompatibleWaffleAccent) ingredients.push({ quantity: goalAccentQuantity(targetAccent), name: targetAccent, availability: "needed" });
+  const compatibleAccent = accentFitsMoment(targetAccent, moment)
+    && !(moment === "Snack" && /yogurt|fruit|berry|kiwi|apple|banana/i.test(unique.map((item) => item.name).join(" ")) && /beans?|lentils?|chickpeas?/.test(targetAccent.toLowerCase()));
+  if (!hasGoalAccent && !incompatibleWaffleAccent && compatibleAccent) ingredients.push({ quantity: goalAccentQuantity(targetAccent), name: targetAccent, availability: "needed" });
   const names = ingredients.map((item) => item.name);
+  const vegetableNames = [vegetable?.name, secondVegetable?.name].filter(Boolean).join(" and ");
+  const eggRiceDinner = moment === "Dinner" && /egg/i.test(protein?.name || "") && /rice/i.test(grain?.name || "");
   const food = moment === "Breakfast"
-    ? `${names.slice(0, 2).join(" and ")} breakfast with ${names.slice(2).join(" and ")}`
+    ? sweetBreakfast ? `${fruit?.name || "Fruit"} yogurt breakfast bowl with ${grain?.name || "oats"} and ${seed?.name || "seeds"}` : `${names.slice(0, 2).join(" and ")} breakfast${names.slice(2).length ? ` with ${names.slice(2).join(" and ")}` : ""}`
     : moment === "Snack"
-      ? `${names.slice(0, 2).join(" with ")}${names[2] ? ` and ${names[2]}` : ""}`
-      : `${names[0] || "Whole-food protein"} ${/cold cuts?|deli|ham|pepperoni/i.test(names[0] || "") ? "plate" : `${moment.toLowerCase()} bowl`} with ${names.slice(1).join(", ")}`;
+      ? /yogurt/i.test(protein?.name || "") ? `${fruit?.name || "Fruit"} yogurt cup with ${seed?.name || "seeds"}` : `${names.slice(0, 2).join(" with ")}${names[2] ? ` and ${names[2]}` : ""}`
+      : eggRiceDinner ? `Vegetable egg fried rice with ${vegetableNames}` : `${names[0] || "Whole-food protein"} ${/cold cuts?|deli|ham|pepperoni/i.test(names[0] || "") ? "plate" : `${moment.toLowerCase()} bowl`} with ${names.slice(1).join(", ")}`;
   const requiresCooking = moment !== "Snack" && (moment !== "Breakfast" || Boolean(grain || /egg/.test(protein?.name.toLowerCase() || "")));
   const seasoningRecommendation = requiresCooking ? recommendCulinarySeasoning(profile, goal, food) : null;
   if (seasoningRecommendation) ingredients.push({ quantity: "1/2 tsp", name: seasoningRecommendation.name, availability: "needed" });
@@ -293,8 +301,13 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   ] : ["Measure the listed ingredients.", "Combine them in one snack portion and serve promptly."];
   const proteinName = protein?.name || "the protein";
   const grainName = grain?.name || "the grain";
-  const vegetableNames = [vegetable?.name, secondVegetable?.name].filter(Boolean).join(" and ");
-  const specificInstructions = requiresCooking ? moment === "Breakfast" ? [
+  const specificInstructions = eggRiceDinner ? [
+    proteinPreparationInstruction(proteinName),
+    `Cook ${grainName} according to its package directions and cool it briefly so the grains stay separate.`,
+    `SautÃ© ${vegetableNames || "the vegetables"} until tender, add the rice, then stir in the cooked egg until evenly combined.`,
+    seasoningRecommendation ? `Season the fried rice lightly with ${seasoningRecommendation.name} to taste.` : "Season lightly and serve as one composed dish.",
+    "Serve one planned portion and refrigerate perishable leftovers within two hours.",
+  ] : requiresCooking ? moment === "Breakfast" ? [
     proteinPreparationInstruction(proteinName),
     isWaffleBreakfast ? `Toast or heat ${grainName} until crisp.` : `Cook or warm ${grainName} according to its package directions.`,
     fruit ? `Wash and portion ${fruit.name} as a fresh side.` : `Prepare ${vegetable?.name || "the produce"} as listed.`,

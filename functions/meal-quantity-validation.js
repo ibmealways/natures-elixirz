@@ -12,6 +12,11 @@ export function validateMealIngredientQuantity(ingredient = {}) {
   const unit = UNIT_ALIASES[parsed.unit] || parsed.unit;
   if (!Number.isFinite(parsed.amount) || parsed.amount <= 0 || !LIMITS[unit]) throw new Error(`Unrecognized household quantity for ${ingredient.name}: ${raw}.`);
   if (parsed.amount > LIMITS[unit]) throw new Error(`Excessive quantity for ${ingredient.name}: ${raw} exceeds the per-meal ${unit} limit.`);
+  const name = String(ingredient.name || "").toLowerCase();
+  const concentratedSeasoning = /\b(black pepper|white pepper|salt|paprika|cumin|turmeric|cinnamon|garlic powder|onion powder|dried oregano|dried basil|dried thyme|dried rosemary|seasoning|spice blend)\b/.test(name);
+  if (concentratedSeasoning && !["tsp", "pinch"].includes(unit)) throw new Error(`Excessive seasoning quantity for ${ingredient.name}: use teaspoons or pinches, not ${unit}.`);
+  if (concentratedSeasoning && unit === "tsp" && parsed.amount > 2) throw new Error(`Excessive seasoning quantity for ${ingredient.name}: ${raw}.`);
+  if (/\b(black pepper|white pepper|salt)\b/.test(name) && unit === "tsp" && parsed.amount > 1) throw new Error(`Excessive seasoning quantity for ${ingredient.name}: ${raw}.`);
   return { raw, amount: parsed.amount, unit, maximum: LIMITS[unit], status: "validated-household-quantity" };
 }
 
