@@ -5,7 +5,7 @@ import { tiers } from "../data/premiumData";
 import GlowNav from "../components/GlowNav";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
-import { openCustomerBillingPortal, recoverSubscriptionEntitlement, startSubscriptionCheckout } from "../utilities/checkout";
+import { openCustomerBillingPortal, recoverSubscriptionEntitlement, stageKernelSelection, startSubscriptionCheckout } from "../utilities/checkout";
 import "../styles/premiumPortal.css";
 import "../styles/premiumGateway.css";
 import "../styles/membershipConsole.css";
@@ -18,6 +18,13 @@ const realmPortals = [
   { id: 5, name: "V.I.P.", realm: "Longevity Convergence", icon: Crown, image: "/assets/vip-longevity-convergence.png" },
 ];
 
+const kernelChoices = [
+  { id: "smoothies", name: "Smoothies", description: "Personalized whole-food Elixirz, pantry coordination, and saved formulas.", icon: GlassWater },
+  { id: "frequencies", name: "Frequencies", description: "Listening realms, timers, pairings, and session history.", icon: AudioLines },
+  { id: "meals", name: "Meal Plans", description: "Credible dishes, coordinated plans, and grocery guidance.", icon: UtensilsCrossed },
+  { id: "movement", name: "Tai Chi + Movement", description: "Guided flows, private baselines, reflection, and progress signals.", icon: PersonStanding },
+];
+
 export default function PremiumPortal() {
   const { profile, setTier, setEntitlement } = useSubscriber();
   const { user, configured } = useAuth();
@@ -25,6 +32,7 @@ export default function PremiumPortal() {
   const [billingMode, setBillingMode] = useState("monthly");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [checkoutTier, setCheckoutTier] = useState(null);
+  const [selectedKernels, setSelectedKernels] = useState(["smoothies"]);
   const activeMembership = ["active", "trialing"].includes(profile.subscriptionStatus);
   const hasStripeBilling = profile.subscriptionAccessSource === "stripe";
 
@@ -53,6 +61,11 @@ export default function PremiumPortal() {
 
   const chooseTier = async (tier) => {
     setCheckoutMessage("");
+    const checkoutKernels = tier.id === 5 ? kernelChoices.map(({ id }) => id) : selectedKernels;
+    if (tier.id < 5 && checkoutKernels.length !== tier.id) {
+      setCheckoutMessage(`Choose exactly ${tier.id} Kernel${tier.id === 1 ? "" : "s"} for this membership level.`);
+      return;
+    }
     if (!configured) {
       setTier(tier.id);
       setCheckoutMessage(`Tier ${tier.id} selected for checkout preview. Personalized tools remain locked until a verified subscription is active.`);
@@ -63,6 +76,12 @@ export default function PremiumPortal() {
       return;
     }
     if (activeMembership && hasStripeBilling) {
+      const staged = await stageKernelSelection(tier.id, checkoutKernels);
+      if (staged?.applied) {
+        setEntitlement(staged.entitlement);
+        setCheckoutMessage("Your Kernel selection is active.");
+        return;
+      }
       await manageBilling();
       return;
     }
@@ -74,7 +93,7 @@ export default function PremiumPortal() {
         setCheckoutMessage("Verify your email, then return here and try again. Nature's Elixirz will refresh your verification automatically.");
         return;
       }
-      await startSubscriptionCheckout(tier.id, billingMode);
+      await startSubscriptionCheckout(tier.id, billingMode, checkoutKernels);
     } catch (error) {
       const code = String(error?.code || "");
       if (code.includes("failed-precondition")) {
@@ -100,8 +119,8 @@ export default function PremiumPortal() {
         <div className="portal-hero__nebula portal-hero__nebula--two" />
         <div className="portal-hero__content">
           <p className="portal-eyebrow"><span className="notranslate" translate="no">Nature&apos;s Elixirz OS</span> · Multiverse Access</p>
-          <h1>Choose Your Cosmic Wellness Dimension</h1>
-          <p>Five realms. One evolving journey from foundational nourishment to the V.I.P. Longevity Circle.</p>
+          <h1>Choose Your Wellness Kernels</h1>
+          <p>Start with the experience you need today, then build your constellation in any order.</p>
           <div className="realm-gateway" aria-label="Explore all five membership dimensions">
             <div className="gateway-path path-one" aria-hidden="true" />
             <div className="gateway-path path-two" aria-hidden="true" />
@@ -117,8 +136,18 @@ export default function PremiumPortal() {
 
       <main className="portal-main">
         <section className="portal-intro">
-          <div><p className="portal-eyebrow">Your wellness constellation</p><h2>Each tier expands your universe</h2><p>Smoothies form the core. Frequency listening, meal planning, Tai Chi, movement reflection, and carefully reviewed longevity intelligence orbit around it as your membership grows.</p></div>
+          <div><p className="portal-eyebrow">Your wellness constellation</p><h2>You choose the order</h2><p>Meal Plans, Smoothies, Frequencies, or Tai Chi + Movement can be your first Kernel at the one-Kernel price. Add the others in any order as your membership grows.</p></div>
           <div className="portal-starting"><span>Launch from</span><strong>$15.99</strong><small>monthly · cancel anytime</small></div>
+        </section>
+
+        <section className="membership-console kernel-picker" aria-labelledby="kernel-picker-title">
+          <div><p className="portal-eyebrow">Build your membership</p><h2 id="kernel-picker-title">Select your Kernels</h2><p>We recommend starting with Smoothies when it fits your routine. Blending creates a convenient, drinkable texture and can make it easier to consume a varied combination of whole foods. Digestion and nutrient absorption still vary by ingredient and by person.</p></div>
+          <div className="kernel-picker__choices">
+            {kernelChoices.map(({ id, name, description, icon: Icon }) => {
+              const selected = selectedKernels.includes(id);
+              return <button key={id} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} onClick={() => setSelectedKernels((current) => selected ? current.filter((item) => item !== id) : [...current, id])}><Icon size={20} /><span><strong>{name}</strong><small>{description}</small></span></button>;
+            })}
+          </div>
         </section>
 
         <section className="portal-billing" aria-label="Billing frequency">
@@ -141,7 +170,7 @@ export default function PremiumPortal() {
               {tier.popular && <span className="tier-realm__badge">MOST POPULAR</span>}
               {tier.vip && <span className="tier-realm__badge tier-realm__badge--vip">V.I.P. MULTIVERSE</span>}
               <div className="tier-realm__content">
-                <p className="tier-realm__eyebrow">Tier {tier.id} · Dimension</p>
+                <p className="tier-realm__eyebrow">{tier.id === 5 ? "V.I.P. · Complete access" : `Level ${tier.id} · ${tier.id} Kernel${tier.id === 1 ? "" : "s"}`}</p>
                 <h3>{tier.name}</h3>
                 <p className="tier-realm__tagline">{tier.tagline}</p>
                 {tier.vip && <p className="tier-realm__founding">First 5,000 keep this founding rate while continuously active. Regular V.I.P. afterward: ${billingMode === "monthly" ? tier.monthly : tier.yearly}{billingMode === "monthly" ? "/month" : "/year"}. Household Circle is included for every V.I.P.</p>}

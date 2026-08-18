@@ -17,7 +17,7 @@ import GlowNav from "../components/GlowNav";
 import InAppYouTubePlayer from "../components/InAppYouTubePlayer";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import TierPreviewBanner, {
-  useTierAccess,
+  useKernelAccess,
 } from "../components/TierPreviewBanner";
 import {
   getMovementContinuation,
@@ -239,7 +239,7 @@ function readStoredValue(key) {
 export default function Frequencies() {
   const { user } = useAuth();
   const storageScope = user?.uid || "guest";
-  const unlocked = useTierAccess(2);
+  const unlocked = useKernelAccess("frequencies");
   const [params] = useSearchParams();
   const source = params.get("source") || "frequency";
   const smoothieContext = readStoredJson("naturesElixirz.latestSmoothieContext") || {};
@@ -374,7 +374,7 @@ export default function Frequencies() {
           </div>
         </header>
 
-        <TierPreviewBanner minimum={2}>
+        <TierPreviewBanner minimum={1} kernel="frequencies">
           Travel through every astroplane and hear short tone previews. Members
           unlock full sessions, playlists, timers, and history.
         </TierPreviewBanner>

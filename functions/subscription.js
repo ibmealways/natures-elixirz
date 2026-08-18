@@ -1,5 +1,35 @@
 export const TIER_IDS = [1, 2, 3, 4, 5];
 export const BILLING_MODES = ["monthly", "yearly"];
+export const SELECTABLE_KERNELS = ["smoothies", "frequencies", "meals", "movement"];
+export const LEGACY_KERNELS_BY_TIER = {
+  1: ["smoothies"], 2: ["smoothies", "frequencies"], 3: ["smoothies", "frequencies", "meals"],
+  4: [...SELECTABLE_KERNELS], 5: [...SELECTABLE_KERNELS, "vip"],
+};
+
+export function sanitizeKernelIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(String).filter((id) => SELECTABLE_KERNELS.includes(id)))];
+}
+
+export function validateKernelSelection(tierId, value) {
+  const tier = Number(tierId);
+  const kernels = sanitizeKernelIds(value);
+  if (tier === 5) return [...SELECTABLE_KERNELS, "vip"];
+  if (![1, 2, 3, 4].includes(tier) || kernels.length !== tier) throw new Error("Choose exactly one Kernel for each membership level.");
+  return kernels;
+}
+
+export function kernelsForEntitlement(entitlement = {}) {
+  const explicit = sanitizeKernelIds(entitlement.kernels);
+  return explicit.length ? explicit : (LEGACY_KERNELS_BY_TIER[Number(entitlement.tier) || 0] || []);
+}
+
+export function hasKernelAccess(entitlement = {}, kernelId, now = Date.now()) {
+  const expiration = entitlement.betaExpiresAt ? Date.parse(entitlement.betaExpiresAt) : null;
+  return ["active", "trialing"].includes(entitlement.status)
+    && (!expiration || expiration > now)
+    && kernelsForEntitlement(entitlement).includes(kernelId);
+}
 
 export function hasActiveBetaTestingAccess(entitlement = {}, now = Date.now()) {
   if (entitlement.accessSource !== "beta-testing" || !["active", "trialing"].includes(entitlement.status)) return false;

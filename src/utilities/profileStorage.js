@@ -38,6 +38,7 @@ export const EMPTY_PROFILE = {
   subscriptionCurrentPeriodStart: null,
   subscriptionBillingMode: null,
   subscriptionAccessSource: null,
+  subscriptionKernels: [],
   completedAt: null,
 };
 
@@ -100,6 +101,7 @@ export function saveSubscriberProfile(profile, scope) {
     subscriptionCurrentPeriodStart: current.subscriptionCurrentPeriodStart,
     subscriptionBillingMode: current.subscriptionBillingMode,
     subscriptionAccessSource: current.subscriptionAccessSource,
+    subscriptionKernels: current.subscriptionKernels,
     completedAt: new Date().toISOString(),
   };
   delete next.clearedAt;
@@ -127,6 +129,7 @@ export function restoreSubscriberProfile(profile, scope) {
     subscriptionCurrentPeriodStart: current.subscriptionCurrentPeriodStart,
     subscriptionBillingMode: current.subscriptionBillingMode,
     subscriptionAccessSource: current.subscriptionAccessSource,
+    subscriptionKernels: current.subscriptionKernels,
     completedAt: profile?.completedAt || (hasLegacyProfileData ? new Date().toISOString() : null),
   };
   if (hasLegacyProfileData) delete restored.clearedAt;
@@ -150,6 +153,7 @@ export function updateSubscriberEntitlement(profile, entitlement, scope) {
     subscriptionCurrentPeriodStart: entitlement?.currentPeriodStart || null,
     subscriptionBillingMode: entitlement?.billingMode || null,
     subscriptionAccessSource: entitlement?.accessSource || null,
+    subscriptionKernels: Array.isArray(entitlement?.kernels) ? entitlement.kernels.map(String) : [],
   };
   localStorage.setItem(keyFor(scope), JSON.stringify(next));
   return next;

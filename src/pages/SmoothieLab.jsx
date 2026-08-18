@@ -5,7 +5,7 @@ import { Activity, Apple, Bone, Brain, Dna, Droplets, Dumbbell, Eye, Flame, Hear
 import GlowNav from "../components/GlowNav";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import NutritionFactsRegistry from "../components/NutritionFactsRegistry";
-import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
+import TierPreviewBanner, { useKernelAccess } from "../components/TierPreviewBanner";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
 import { functions } from "../firebase";
@@ -68,7 +68,7 @@ function ScopedSmoothieLab({ storageScope }) {
   const restoredSession = useMemo(() => getKernelSession(storageScope, "smoothie"), [storageScope]);
   const [params] = useSearchParams();
   const { profile, isOnboarded } = useSubscriber();
-  const unlocked = useTierAccess(1);
+  const unlocked = useKernelAccess("smoothies");
   const workingProfile = isOnboarded ? profile : { healthGoals: [], conditions: [], allergies: "", avoidIngredients: "", dietaryPattern: "omnivore" };
   const requestedGoal = params.get("goal");
   const astraTransfer = params.get("source") === "astra" ? getAstraKernelTransfer(storageScope, "smoothie") : null;
@@ -348,7 +348,7 @@ function ScopedSmoothieLab({ storageScope }) {
       <div className="elixir-hero-art" role="img" aria-label="Cosmic green smoothie surrounded by blueberries, spinach, banana, and ginger"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><span className="hero-art-label">Botanical intelligence</span></div>
     </header>
 
-    <TierPreviewBanner minimum={1}>Explore every goal and sample formula. Subscribe to personalize from your pantry, generate, and save recipes.</TierPreviewBanner>
+    <TierPreviewBanner minimum={1} kernel="smoothies">Explore every goal and sample formula. Subscribe to personalize from your pantry, generate, and save recipes.</TierPreviewBanner>
     {!isOnboarded && <div className="ne-alert">Create a profile to add allergies, medications, dietary preferences, and personal goals. <Link to="/account">Build profile</Link></div>}
 
     <section className="ne-controls elixir-builder" id="elixir-builder">

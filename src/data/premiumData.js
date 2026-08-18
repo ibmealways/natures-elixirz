@@ -1,19 +1,19 @@
 export const tiers = [
   {
-    id: 1, name: "Blend", tagline: "Smoothie Development", monthly: 15.99, yearly: 150,
-    features: ["Personalized smoothie recipes", "Exact quantities for five sizes", "Goal-focused whole foods", "Saved recipes"],
+    id: 1, name: "One Kernel", tagline: "Choose your starting experience", monthly: 15.99, yearly: 150,
+    features: ["Your choice of one core Kernel", "Personalized generation", "Saved history and cross-device sync", "Add another Kernel whenever you are ready"],
   },
   {
-    id: 2, name: "Resonate", tagline: "Smoothies + Frequencies", monthly: 29.99, yearly: 300,
-    features: ["Everything in Tier 1", "Relaxation frequency audio", "Listening timers", "Session history"],
+    id: 2, name: "Two Kernels", tagline: "Build your own pairing", monthly: 29.99, yearly: 300,
+    features: ["Any two core Kernels", "Kernel-to-Kernel pairing", "Personalized generation", "Saved history and cross-device sync"],
   },
   {
-    id: 3, name: "Nourish", tagline: "Smoothies + Audio + Meals", monthly: 44.99, yearly: 480,
-    features: ["Everything in Tier 2", "Whole-food meal plans", "Coordinated grocery lists", "Dietary preference support"],
+    id: 3, name: "Three Kernels", tagline: "Create your wellness constellation", monthly: 44.99, yearly: 480,
+    features: ["Any three core Kernels", "Cross-Kernel coordination", "Personalized generation", "Saved history and cross-device sync"],
   },
   {
-    id: 4, name: "Whole Life", tagline: "Complete Wellness OS", monthly: 59.99, yearly: 650, popular: true,
-    features: ["Everything in Tier 3", "Tai Chi studio", "Balance, flexibility, and mindfulness flows", "Movement wellness trend tracking"],
+    id: 4, name: "Whole Life", tagline: "All four core Kernels", monthly: 59.99, yearly: 650, popular: true,
+    features: ["Smoothies", "Frequencies", "Meal Plans", "Tai Chi + Movement"],
   },
   {
     id: 5, name: "V.I.P. Longevity Circle", tagline: "Intelligence + Member Gifts", monthly: 99.99, yearly: 1080, foundingMonthly: 59.99, foundingYearly: 650, vip: true,

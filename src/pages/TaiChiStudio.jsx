@@ -26,7 +26,7 @@ import TaiChiPhaseDemo from "../components/TaiChiPhaseDemo";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import "../styles/taiChiMoreVideos.css";
 import TierPreviewBanner, {
-  useTierAccess,
+  useKernelAccess,
 } from "../components/TierPreviewBanner";
 import { taiChiFlows } from "../data/taiChiFlows";
 import {
@@ -221,7 +221,7 @@ export default function TaiChiStudio() {
   const { user } = useAuth();
   const storageScope = user?.uid || "guest";
   const [params] = useSearchParams();
-  const unlocked = useTierAccess(4);
+  const unlocked = useKernelAccess("movement");
   const rememberedFocus = buildKernelBrief(
     storageScope,
     "taiChi",
@@ -345,7 +345,7 @@ export default function TaiChiStudio() {
           </div>
         </header>
 
-        <TierPreviewBanner minimum={4}>
+        <TierPreviewBanner minimum={1} kernel="movement">
           Explore every pathway and try the complete one-minute movement
           constellation. Members unlock full guided sessions, progression, and
           streak tracking.

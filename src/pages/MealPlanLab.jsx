@@ -5,7 +5,7 @@ import { Activity, Apple, Bone, Brain, CalendarDays, Database, Dna, Droplets, Ey
 import GlowNav from "../components/GlowNav";
 import KernelFeedbackContract from "../components/KernelFeedbackContract";
 import NutritionFactsRegistry from "../components/NutritionFactsRegistry";
-import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
+import TierPreviewBanner, { useKernelAccess } from "../components/TierPreviewBanner";
 import { useSubscriber } from "../context/SubscriberContext";
 import { useAuth } from "../context/AuthContext";
 import { functions } from "../firebase";
@@ -102,7 +102,7 @@ export default function MealPlanLab() {
   const mealKitchenItems = useMemo(() => getMealPlanningIngredients(storageScope), [storageScope, smoothieInventory, mealInventory]);
   const generationContext = useMemo(() => buildGenerationContext(profile, { pantry: mealKitchenItems, fridge: [], freezer: [] }, buildKernelBrief(storageScope, "meals")), [profile, mealKitchenItems, storageScope]);
   const nutritionRisk = useMemo(() => assessClientNutritionRisk(profile), [profile]);
-  const unlocked = useTierAccess(3);
+  const unlocked = useKernelAccess("meals");
   const requestedGoal = params.get("goal");
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
   const [goal, setGoal] = useState(VALID_GOALS.includes(astraTransfer?.goal) ? astraTransfer.goal : VALID_GOALS.includes(requestedGoal) ? requestedGoal : restoredSession?.goal || rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
@@ -323,7 +323,7 @@ export default function MealPlanLab() {
       </div>
     </header>
 
-    <TierPreviewBanner minimum={3}>Explore every nourishment rhythm and one sample day. Members generate personalized one-, three-, seven-, or thirty-day plans.</TierPreviewBanner>
+    <TierPreviewBanner minimum={1} kernel="meals">Explore every nourishment rhythm and one sample day. Members generate personalized one-, three-, seven-, or thirty-day plans.</TierPreviewBanner>
 
     <section className="grove-planner" id="grove-planner">
       <div className="planner-heading"><div><p className="ne-kicker">Cultivation console</p><h2>Shape your nourishment rhythm</h2></div><span><i /> Grove intelligence online</span></div>

@@ -11,7 +11,7 @@ import * as functionsV1 from "firebase-functions/v1";
 import { createHash, randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import Stripe from "stripe";
-import { billingModeFromPrice, hasActiveBetaTestingAccess, priceKey, tierFromPrice, validatePlanningSelection } from "./subscription.js";
+import { billingModeFromPrice, hasActiveBetaTestingAccess, hasKernelAccess, priceKey, sanitizeKernelIds, tierFromPrice, validateKernelSelection, validatePlanningSelection } from "./subscription.js";
 import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
 import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
@@ -814,7 +814,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating a personalized smoothie.");
   const uid = request.auth.uid;
   const entitlement = (await db.doc(`users/${uid}/private/entitlement`).get()).data();
-  if (!hasTierAccess(entitlement, 1)) throw new HttpsError("permission-denied", "Tier 1 access is required for AI smoothie generation.");
+  if (!hasKernelAccess(entitlement, "smoothies")) throw new HttpsError("permission-denied", "Smoothies Kernel access is required for AI smoothie generation.");
   const accountSnapshot = await db.doc(`users/${uid}`).get();
   const account = accountSnapshot.data() || {};
   if (!account.profile?.completedAt || !account.profile?.name) throw new HttpsError("failed-precondition", "Complete and synchronize your profile before generating.");
@@ -873,7 +873,7 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating a personalized meal plan.");
   const uid = request.auth.uid;
   const entitlement = (await db.doc(`users/${uid}/private/entitlement`).get()).data();
-  if (!hasTierAccess(entitlement, 3)) throw new HttpsError("permission-denied", "Tier 3 access is required for AI meal planning.");
+  if (!hasKernelAccess(entitlement, "meals")) throw new HttpsError("permission-denied", "Meal Plans Kernel access is required for AI meal planning.");
   try { validatePlanningSelection(entitlement, request.data || {}); }
   catch (error) { throw new HttpsError("failed-precondition", error.message); }
   const account = (await db.doc(`users/${uid}`).get()).data() || {};
@@ -925,7 +925,7 @@ export const generateMealPlanVisuals = onCall({ secrets: [openaiSecret], timeout
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to generate meal visuals.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating meal visuals.");
   const entitlement = (await db.doc(`users/${request.auth.uid}/private/entitlement`).get()).data();
-  if (!hasTierAccess(entitlement, 3)) throw new HttpsError("permission-denied", "Tier 3 access is required for personalized meal visuals.");
+  if (!hasKernelAccess(entitlement, "meals")) throw new HttpsError("permission-denied", "Meal Plans Kernel access is required for personalized meal visuals.");
   if (entitlement?.canGenerateImages === false) throw new HttpsError("permission-denied", "Family accounts use meal-matched reference visuals and do not consume image-generation credits.");
 
   const meals = Array.isArray(request.data?.meals) ? request.data.meals.slice(0, 5).map(validateMealVisual) : [];
@@ -964,7 +964,7 @@ export const generateSmoothieVisual = onCall({ secrets: [openaiSecret], timeoutS
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to generate a smoothie visual.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating smoothie visuals.");
   const entitlement = (await db.doc(`users/${request.auth.uid}/private/entitlement`).get()).data();
-  if (!hasTierAccess(entitlement, 1)) throw new HttpsError("permission-denied", "Tier 1 access is required for personalized smoothie visuals.");
+  if (!hasKernelAccess(entitlement, "smoothies")) throw new HttpsError("permission-denied", "Smoothies Kernel access is required for personalized smoothie visuals.");
   if (entitlement?.canGenerateImages === false) throw new HttpsError("permission-denied", "Family accounts use the ingredient-matched reference visual and do not consume image-generation credits.");
   const smoothie = validateSmoothieVisual(request.data);
   const signature = createHash("sha256").update(JSON.stringify(smoothie)).digest("hex");
@@ -1212,7 +1212,9 @@ async function releaseFoundingVipReservation(uid) {
 export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePrices], invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before checkout.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before checkout.");
-  const { tierId, billingMode } = request.data || {};
+  const { tierId, billingMode, kernelIds } = request.data || {};
+  let selectedKernels;
+  try { selectedKernels = validateKernelSelection(tierId, kernelIds); } catch (error) { throw new HttpsError("invalid-argument", error.message); }
   let key;
   try { key = priceKey(tierId, billingMode); } catch { throw new HttpsError("invalid-argument", "Invalid subscription selection."); }
   const prices = stripePrices.value();
@@ -1231,6 +1233,7 @@ export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePric
     tierId: String(tierId),
     foundingVip: String(founding.foundingVip),
     foundingVipNumber: founding.foundingVipNumber ? String(founding.foundingVipNumber) : "",
+    kernelIds: selectedKernels.join(","),
   };
   try {
     const session = await stripe.checkout.sessions.create({
@@ -1265,6 +1268,23 @@ export const createBillingPortalSession = onCall({ secrets: [stripeSecret], invo
     console.error("Stripe billing portal creation failed", { uid: request.auth.uid, code: error?.code });
     throw new HttpsError("failed-precondition", "The billing portal is not available yet. Please contact support.");
   }
+});
+
+export const stageKernelSelection = onCall({ secrets: [stripeSecret], invoker: "public", enforceAppCheck }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before changing Kernels.");
+  const { tierId, kernelIds } = request.data || {};
+  let kernels;
+  try { kernels = validateKernelSelection(tierId, kernelIds); } catch (error) { throw new HttpsError("invalid-argument", error.message); }
+  const entitlement = (await db.doc(`users/${request.auth.uid}/private/entitlement`).get()).data() || {};
+  if (entitlement.accessSource !== "stripe" || !entitlement.stripeSubscriptionId) throw new HttpsError("failed-precondition", "An active Stripe membership is required.");
+  if (Number(entitlement.tier) === Number(tierId)) {
+    const stripe = new Stripe(stripeSecret.value());
+    await stripe.subscriptions.update(entitlement.stripeSubscriptionId, { metadata: { kernelIds: kernels.join(",") } });
+    await db.doc(`users/${request.auth.uid}/private/entitlement`).set({ kernels, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { staged: false, applied: true, entitlement: { ...entitlement, tier: Number(tierId), kernels } };
+  }
+  await db.doc(`users/${request.auth.uid}/private/pendingKernelSelection`).set({ tier: Number(tierId), kernels, createdAt: FieldValue.serverTimestamp() });
+  return { staged: true, tier: Number(tierId), kernels };
 });
 
 async function recordSubscriptionCounts(uid, subscription, tier) {
@@ -1315,6 +1335,17 @@ async function writeEntitlement(uid, subscription, prices) {
   const billingMode = billingModeFromPrice(priceId, prices);
   const foundingVip = tier === 5 && subscription.metadata?.foundingVip === "true";
   const foundingVipNumber = foundingVip ? Number(subscription.metadata?.foundingVipNumber || 0) || null : null;
+  const pendingRef = db.doc(`users/${uid}/private/pendingKernelSelection`);
+  const pendingSnapshot = await pendingRef.get();
+  const pending = pendingSnapshot.data() || {};
+  const pendingKernels = sanitizeKernelIds(pending.kernels);
+  const metadataKernels = sanitizeKernelIds(String(subscription.metadata?.kernelIds || "").split(",").filter(Boolean));
+  const explicitKernels = Number(pending.tier) === tier && pendingKernels.length === tier ? pendingKernels : metadataKernels;
+  const kernels = tier === 5 ? ["smoothies", "frequencies", "meals", "movement", "vip"] : explicitKernels;
+  if (Number(pending.tier) === tier && pendingKernels.length === tier) {
+    const stripe = new Stripe(stripeSecret.value());
+    await stripe.subscriptions.update(subscription.id, { metadata: { kernelIds: kernels.join(",") } });
+  }
   if (!tier) {
     console.error("Stripe subscription price is not mapped to a Nature's Elixirz tier", { priceId, subscriptionId: subscription.id });
   }
@@ -1334,9 +1365,11 @@ async function writeEntitlement(uid, subscription, prices) {
     householdCircleIncluded: tier === 5,
     foundingVip,
     foundingVipNumber,
+    kernels,
     updatedAt: FieldValue.serverTimestamp(),
   };
   await db.doc(`users/${uid}/private/entitlement`).set(nextEntitlement, { merge: true });
+  if (tier === 5 || (Number(pending.tier) === tier && pendingKernels.length === tier)) await pendingRef.delete();
   await recordSubscriptionCounts(uid, subscription, tier);
   if (foundingVip && ["active", "trialing"].includes(subscription.status)) await redeemFoundingVipReservation(uid, subscription.id);
   await updateVipFamilyEntitlements(uid, nextEntitlement);

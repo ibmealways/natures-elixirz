@@ -3,10 +3,11 @@ import { tiers } from "./premiumData";
 import { editorialStandards } from "./vipContent";
 
 describe("subscription tiers", () => {
-  it("defines five cumulative tiers", () => {
+  it("defines four choose-your-Kernel levels plus V.I.P.", () => {
     expect(tiers).toHaveLength(5);
     expect(tiers.map((tier) => tier.id)).toEqual([1, 2, 3, 4, 5]);
-    expect(tiers.slice(1).every((tier, index) => tier.features[0] === `Everything in Tier ${index + 1}`)).toBe(true);
+    expect(tiers.slice(0, 3).every((tier, index) => tier.name === `${["One", "Two", "Three"][index]} Kernel${index ? "s" : ""}`)).toBe(true);
+    expect(tiers[3].features).toEqual(["Smoothies", "Frequencies", "Meal Plans", "Tai Chi + Movement"]);
   });
 
   it("includes the V.I.P. briefing and physical member benefit", () => {

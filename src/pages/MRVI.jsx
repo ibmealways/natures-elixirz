@@ -5,7 +5,7 @@ import {
   LockKeyhole, RefreshCcw, ScanLine, ShieldCheck, Sparkles, Target
 } from "lucide-react";
 import GlowNav from "../components/GlowNav";
-import TierPreviewBanner, { useTierAccess } from "../components/TierPreviewBanner";
+import TierPreviewBanner, { useKernelAccess } from "../components/TierPreviewBanner";
 import GaitCapture from "../components/GaitCapture";
 import { useMRVI } from "../context/MRVIContext";
 import { evaluateMRVI } from "../utilities/mrviEngine";
@@ -51,7 +51,7 @@ function StatusPill({ status }) {
 export default function MRVIPage() {
   const { user } = useAuth();
   const storageScope = user?.uid || "guest";
-  const unlocked = useTierAccess(4);
+  const unlocked = useKernelAccess("movement");
   const { profile, latestScan, giveConsent, addScanFromMetrics, resetAll } = useMRVI();
   const [metrics, setMetrics] = useState({
     mobility: "1.00", balance: "1.00", symmetry: "1.00", energyFlow: "1.00", smoothness: "1.00",
@@ -148,7 +148,7 @@ export default function MRVIPage() {
       </div>
     </header>
 
-    <TierPreviewBanner minimum={4}>Explore the sample scan, movement signals, and supportive action pathway. Members unlock private baselines, analysis, and history.</TierPreviewBanner>
+    <TierPreviewBanner minimum={1} kernel="movement">Explore the sample scan, movement signals, and supportive action pathway. Members unlock private baselines, analysis, and history.</TierPreviewBanner>
 
     <GaitCapture unlocked={unlocked} onMetrics={receiveCapturedMetrics} />
 
