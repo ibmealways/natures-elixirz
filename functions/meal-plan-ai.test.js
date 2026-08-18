@@ -84,4 +84,36 @@ describe("meal plan AI contract", () => {
     const proposal = { summary: "Incoherent lunch.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), meal("Breakfast", "Breakfast option"), lunch, meal("Snack", "Snack option"), meal("Dinner", "Dinner option")] }] };
     assert.throws(() => validateMealPlanProposal(proposal, context), /duplicated leafy greens/i);
   });
+
+  it("rejects an ambiguous assortment of deli meats as one lunch protein", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const lunch = {
+      ...meal("Lunch", "Cold cuts lunch bowl with rice and vegetables"),
+      ingredients: [
+        { quantity: "4 oz", name: "Cold Cuts (Ham, Cheese, Pepperoni, Buffalo Chicken)", availability: "needed" },
+        { quantity: "3/4 cup", name: "Rice", availability: "needed" },
+        { quantity: "1 cup", name: "Carrot", availability: "needed" },
+      ],
+      instructions: ["Keep the cold cuts refrigerated.", "Cook rice and carrot, then serve."],
+    };
+    const proposal = { summary: "Ambiguous deli lunch.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), meal("Breakfast", "Breakfast option"), lunch, meal("Snack", "Snack option"), meal("Dinner", "Dinner option")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /ambiguous multi-protein deli assortment/i);
+  });
+
+  it("rejects unprepared egg, oat, and berry components presented as a snack", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const snack = {
+      ...meal("Snack", "Raspberries with eggs, hemp seeds, and oats"),
+      ingredients: [
+        { quantity: "1 cup", name: "Raspberries", availability: "needed" },
+        { quantity: "2 count", name: "Eggs", availability: "needed" },
+        { quantity: "2 tbsp", name: "Hemp seeds", availability: "needed" },
+        { quantity: "1 cup", name: "Oats", availability: "needed" },
+      ],
+      instructions: ["Serve the ingredients together."],
+      requiresCooking: false,
+    };
+    const proposal = { summary: "Undefined snack.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), meal("Breakfast", "Breakfast option"), meal("Lunch", "Lunch option"), snack, meal("Dinner", "Dinner option")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /without defining a cooked snack recipe/i);
+  });
 });

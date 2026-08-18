@@ -179,6 +179,8 @@ Requirements:
 - Every non-garnish ingredient in a cooked meal must have a clear role in the cooking or plating instructions. Do not append unused pantry foods merely to increase ingredient or nutrient coverage.
 - Do not combine a savory meat-and-starch breakfast with multiple unrelated sweet items. Choose one cohesive breakfast format and place at most one simple fruit side with it.
 - Do not list both a specific green such as spinach and generic "leafy greens." Name one exact vegetable. Mashed-potato and legume meals must be a recognizable preparation such as a shepherd-style pie, stew, or croquette—not a generic inventory bowl.
+- A pantry label containing several different deli meats or meats plus cheese is not one valid recipe protein. Select one exact protein and give it a defined role in a sandwich, wrap, salad, or composed plate.
+- Snacks containing raw eggs, oats, seeds, and fruit must become a recognizable cooked preparation such as an oat muffin or baked oat cup. Do not present unprepared recipe components as a finished snack.
 - Use available kitchen items where they fit naturally. Mark them on-hand. You may add goal-supportive missing foods and mark them needed so the app can build a shopping list.
 - Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
@@ -205,7 +207,7 @@ const SWEET_BREAKFAST_COMPONENT = /\b(banana|berries|berry|mango|dragon fruit|me
 const LEGUME = /\b(bean|beans|lentil|lentils|chickpea|chickpeas)\b/;
 
 function assertCulinaryCoherence(meal, ingredients, dayNumber) {
-  if (["Smoothie", "Snack"].includes(meal.meal)) return;
+  if (meal.meal === "Smoothie") return;
   const dish = normalize(meal.food);
   const ingredientNames = ingredients.map((item) => normalize(item.name));
   const instructions = normalize((meal.instructions || []).join(" "));
@@ -215,6 +217,24 @@ function assertCulinaryCoherence(meal, ingredients, dayNumber) {
   const hasSpecificGreens = ingredientNames.some((name) => /\b(spinach|kale|collard|chard|arugula)\b/.test(name));
   if (hasGenericGreens && hasSpecificGreens) {
     throw new Error(`${label} duplicated leafy greens instead of defining one coherent vegetable.`);
+  }
+
+  const ambiguousDeliMix = ingredientNames.some((name) => {
+    const deliMatches = name.match(/\b(ham|pepperoni|salami|chicken|turkey|bologna|cheese)\b/g) || [];
+    return /cold cuts|deli meat/.test(name) && new Set(deliMatches).size > 1;
+  });
+  if (ambiguousDeliMix) {
+    throw new Error(`${label} used an ambiguous multi-protein deli assortment instead of one defined recipe ingredient.`);
+  }
+
+  if (meal.meal === "Snack") {
+    const hasEgg = ingredientNames.some((name) => /\begg|eggs\b/.test(name));
+    const hasBakingComponents = ingredientNames.some((name) => /\b(oat|oats|flour)\b/.test(name)) && ingredientNames.some((name) => /\b(berry|berries|blueberr|strawberr|raspberr|blackberr|fruit)/.test(name));
+    const isDefinedEggSnack = /\b(muffin|baked|oat cup|frittata|egg bite|hard boiled|deviled)\b/.test(dish);
+    if (hasEgg && hasBakingComponents && (!meal.requiresCooking || !isDefinedEggSnack)) {
+      throw new Error(`${label} listed egg, grain, and fruit components without defining a cooked snack recipe.`);
+    }
+    return;
   }
 
   if (meal.requiresCooking && ingredients.length >= 4) {
