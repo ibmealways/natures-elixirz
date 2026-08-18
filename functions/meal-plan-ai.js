@@ -205,6 +205,11 @@ const CULINARY_GARNISH = /\b(salt|pepper|seasoning|spice|herb|thyme|paprika|garl
 const SAVORY_PROTEIN = /\b(chicken|turkey|beef|pork|ham|sausage|fish|salmon|tuna|shrimp)\b/;
 const SWEET_BREAKFAST_COMPONENT = /\b(banana|berries|berry|mango|dragon fruit|melon|peach|pear|apple|pineapple|nut butter|peanut butter|maple|honey)\b/;
 const LEGUME = /\b(bean|beans|lentil|lentils|chickpea|chickpeas)\b/;
+const EGG = /\b(egg|eggs)\b/;
+const DAIRY_PROTEIN = /\b(yogurt|cottage cheese)\b/;
+const FRUIT = /\b(apple|banana|berries|berry|blueberr|strawberr|raspberr|blackberr|mango|orange|peach|pear|pineapple|melon|kiwi|fruit)\b/;
+const BREAKFAST_GRAIN = /\b(oat|oats|oatmeal|bread|toast|waffle|pancake|quinoa)\b/;
+const RECOGNIZABLE_DISH = /\b(scramble|omelet|frittata|oatmeal|overnight oats|pudding|parfait|bowl|toast|sandwich|wrap|salad|soup|stew|chili|taco|burrito|curry|stir fry|fried rice|skillet|pasta|roast|roasted|baked|grilled|plate|chicken and waffles)\b/;
 
 function assertCulinaryCoherence(meal, ingredients, dayNumber) {
   if (meal.meal === "Smoothie") return;
@@ -212,6 +217,7 @@ function assertCulinaryCoherence(meal, ingredients, dayNumber) {
   const ingredientNames = ingredients.map((item) => normalize(item.name));
   const instructions = normalize((meal.instructions || []).join(" "));
   const label = `Day ${dayNumber} ${meal.meal}`;
+  const substantiveNames = ingredientNames.filter((name) => name && !CULINARY_GARNISH.test(name));
 
   const hasGenericGreens = ingredientNames.some((name) => /\bleafy greens\b/.test(name));
   const hasSpecificGreens = ingredientNames.some((name) => /\b(spinach|kale|collard|chard|arugula)\b/.test(name));
@@ -234,6 +240,13 @@ function assertCulinaryCoherence(meal, ingredients, dayNumber) {
     if (hasEgg && hasBakingComponents && (!meal.requiresCooking || !isDefinedEggSnack)) {
       throw new Error(`${label} listed egg, grain, and fruit components without defining a cooked snack recipe.`);
     }
+    const hasMealProtein = substantiveNames.some((name) => SAVORY_PROTEIN.test(name));
+    const isDefinedSavorySnack = /\b(egg bite|frittata|deviled|hard boiled|snack plate|lettuce wrap)\b/.test(dish);
+    if (hasMealProtein && !isDefinedSavorySnack) {
+      throw new Error(`${label} used a lunch-or-dinner protein without defining a recognizable savory snack.`);
+    }
+    if (substantiveNames.length > 4) throw new Error(`${label} included too many unrelated components for one snack.`);
+    if (!RECOGNIZABLE_DISH.test(dish)) throw new Error(`${label} did not identify a recognizable prepared dish.`);
     return;
   }
 
@@ -253,6 +266,27 @@ function assertCulinaryCoherence(meal, ingredients, dayNumber) {
     if (sweetComponents.length > 1 && !/\b(hash|sandwich|wrap|taco|burrito)\b/.test(dish)) {
       throw new Error(`${label} combined a savory meat plate with too many unrelated sweet breakfast components.`);
     }
+  }
+
+  if (meal.meal === "Breakfast") {
+    const hasBreakfastFoundation = substantiveNames.some((name) => EGG.test(name) || DAIRY_PROTEIN.test(name) || BREAKFAST_GRAIN.test(name));
+    const hasNonBreakfastProtein = substantiveNames.some((name) => /\b(tuna|salmon|fish|pork ribs?|cold cuts?|pepperoni|deli meat|kidney beans?)\b/.test(name));
+    const definedSavoryBreakfast = /\b(hash|breakfast sandwich|breakfast burrito|breakfast taco|salmon toast|beans on toast)\b/.test(dish);
+    if (!hasBreakfastFoundation && !definedSavoryBreakfast) throw new Error(`${label} lacked a credible breakfast foundation.`);
+    if (hasNonBreakfastProtein && !definedSavoryBreakfast) throw new Error(`${label} used a lunch-or-dinner protein without a recognized breakfast preparation.`);
+  }
+
+  if (["Lunch", "Dinner"].includes(meal.meal)) {
+    const fruitComponents = substantiveNames.filter((name) => FRUIT.test(name));
+    const fruitHasCulinaryRole = /\b(salad|salsa|chutney|glaze|relish|roasted|stuffed)\b/.test(dish)
+      && fruitComponents.every((name) => name.split(" ").some((token) => token.length >= 4 && instructions.includes(token)));
+    if (fruitComponents.length > 0 && !fruitHasCulinaryRole) {
+      throw new Error(`${label} added fruit without a defined culinary role in the dish.`);
+    }
+  }
+
+  if (!RECOGNIZABLE_DISH.test(dish)) {
+    throw new Error(`${label} did not identify a recognizable prepared dish.`);
   }
 
   const hasMash = ingredientNames.some((name) => /\bmashed potato/.test(name));

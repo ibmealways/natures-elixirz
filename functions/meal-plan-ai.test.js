@@ -2,11 +2,19 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildMealPlanContext, buildMealPlanInstructions, validateMealPlanProposal } from "./meal-plan-ai.js";
 
-const meal = (type, food) => ({
+const DEFAULT_DISHES = { Smoothie: "Berry protein smoothie", Breakfast: "Egg and brown rice breakfast bowl", Lunch: "Chicken and brown rice bowl", Snack: "Berry yogurt snack bowl", Dinner: "Chicken and brown rice dinner plate" };
+const DEFAULT_INGREDIENTS = {
+  Smoothie: [{ quantity: "1 cup", name: "Berries" }, { quantity: "1 scoop", name: "Protein powder" }],
+  Breakfast: [{ quantity: "2 count", name: "Eggs" }, { quantity: "3/4 cup", name: "Brown rice" }],
+  Lunch: [{ quantity: "4 oz", name: "Chicken" }, { quantity: "3/4 cup", name: "Brown rice" }],
+  Snack: [{ quantity: "3/4 cup", name: "Plain yogurt" }, { quantity: "1 cup", name: "Berries" }],
+  Dinner: [{ quantity: "4 oz", name: "Chicken" }, { quantity: "3/4 cup", name: "Brown rice" }],
+};
+const meal = (type, food = DEFAULT_DISHES[type]) => ({
   meal: type,
-  food,
-  ingredients: [{ quantity: "4 oz", name: "Chicken", availability: "needed" }, { quantity: "1 cup", name: "Brown rice", availability: "needed" }],
-  instructions: ["Cook safely and serve."],
+  food: /option$/i.test(food) ? DEFAULT_DISHES[type] : food,
+  ingredients: DEFAULT_INGREDIENTS[type].map((item) => ({ ...item, availability: "needed" })),
+  instructions: [`Prepare ${DEFAULT_INGREDIENTS[type].map((item) => item.name).join(" and ")} safely and serve.`],
   requiresCooking: type !== "Snack",
   rationale: "Provides protein and carbohydrate for muscle nourishment.",
 });
@@ -23,10 +31,10 @@ describe("meal plan AI contract", () => {
 
   it("validates five ordered meals and independently computes pantry availability", () => {
     const context = buildMealPlanContext({}, { goal: "muscles", days: 1, kitchenItems: ["Chicken"] });
-    const proposal = { summary: "Protein-forward meal plan.", days: [{ day: 1, meals: ["Smoothie", "Breakfast", "Lunch", "Snack", "Dinner"].map((type) => meal(type, `${type} option`)) }] };
+    const proposal = { summary: "Protein-forward meal plan.", days: [{ day: 1, meals: ["Smoothie", "Breakfast", "Lunch", "Snack", "Dinner"].map((type) => meal(type)) }] };
     const plan = validateMealPlanProposal(proposal, context);
     assert.equal(plan[0].meals.length, 5);
-    assert.equal(plan[0].meals[0].ingredients[0].availability, "on-hand");
+    assert.equal(plan[0].meals.find((item) => item.meal === "Lunch").ingredients.find((item) => item.name === "Chicken").availability, "on-hand");
     assert.equal(plan[0].meals[0].generationSource, "openai");
     assert.equal(plan[0].meals[0].nutritionIntelligence.version, "nutrition-intelligence-v2");
     assert.ok(plan[0].dailyGoalFit >= 35);
@@ -115,5 +123,32 @@ describe("meal plan AI contract", () => {
     };
     const proposal = { summary: "Undefined snack.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), meal("Breakfast", "Breakfast option"), meal("Lunch", "Lunch option"), snack, meal("Dinner", "Dinner option")] }] };
     assert.throws(() => validateMealPlanProposal(proposal, context), /without defining a cooked snack recipe/i);
+  });
+
+  it("rejects a technically measurable meal that is not a recognizable dish", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const breakfast = {
+      ...meal("Breakfast", "Chicken, rice, apple, broccoli combination"),
+      ingredients: [
+        { quantity: "4 oz", name: "Chicken thighs" },
+        { quantity: "3/4 cup", name: "Rice" },
+        { quantity: "1 cup", name: "Apple" },
+        { quantity: "1 cup", name: "Broccoli" },
+      ],
+      instructions: ["Cook the chicken and rice, then serve with apple and broccoli."],
+    };
+    const proposal = { summary: "Ingredient assembly.", days: [{ day: 1, meals: [meal("Smoothie"), breakfast, meal("Lunch"), meal("Snack"), meal("Dinner")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /recognizable prepared dish|credible breakfast/i);
+  });
+
+  it("rejects lunch or dinner fruit that has no defined culinary role", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const lunch = {
+      ...meal("Lunch", "Chicken and rice bowl with banana"),
+      ingredients: [{ quantity: "4 oz", name: "Chicken" }, { quantity: "3/4 cup", name: "Rice" }, { quantity: "1 cup", name: "Banana" }],
+      instructions: ["Cook chicken and rice, then place the banana beside the bowl."],
+    };
+    const proposal = { summary: "Disconnected fruit.", days: [{ day: 1, meals: [meal("Smoothie"), meal("Breakfast"), lunch, meal("Snack"), meal("Dinner")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /fruit without a defined culinary role/i);
   });
 });

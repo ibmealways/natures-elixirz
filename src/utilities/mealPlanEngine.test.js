@@ -185,6 +185,15 @@ describe("generateMealPlan", () => {
     ingredients.filter((item) => /kidney beans/i.test(item.name)).forEach((item) => expect(item.quantity).toMatch(/cup/));
   });
 
+  it("builds a full pantry week exclusively from recognizable recipe archetypes", () => {
+    const kitchenItems = ["Eggs", "Plain Greek yogurt", "Chicken thighs", "Pork tenderloin", "Canned Tuna", "Red Kidney Beans", "Bread", "Waffles", "Oats", "Rice", "Kiwi", "Apple", "Mixed berries", "Spinach", "Broccoli", "Carrot", "Cucumber", "Cherry tomatoes", "Chia seeds", "Peanut butter"];
+    const plan = generateMealPlan({}, "joints", 7, { kitchenItems });
+    const meals = plan.flatMap((day) => day.meals.filter((meal) => meal.meal !== "Smoothie"));
+    expect(meals).toHaveLength(28);
+    expect(meals.every((meal) => meal.recipeArchetype === true)).toBe(true);
+    expect(meals.map((meal) => meal.food).join(" ")).not.toMatch(/breakfast with .* and .* and .* and|coherent snack plate or bowl/i);
+  });
+
   it("substitutes animal foods for vegan profiles", () => {
     const plan = generateMealPlan({ dietaryPattern: "vegan" }, "heart", 1);
     expect(plan[0].meals.some((meal) => meal.food.includes("salmon"))).toBe(false);
