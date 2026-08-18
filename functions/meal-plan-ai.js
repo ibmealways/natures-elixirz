@@ -176,6 +176,9 @@ Requirements:
 - The selected rhythm must materially control food selection. For muscle nourishment, distribute meaningful protein across breakfast, lunch, snack, and dinner and include useful carbohydrate around recovery; do not merely rename an ordinary plan.
 - Respect every allergy, intolerance, dietary pattern, avoided ingredient, and relevant condition. Never claim treatment, prevention, detoxification, or guaranteed organ benefit.
 - Prefer coherent recognizable dishes. Never create pairings such as meat with fruit as a snack, beans with waffles unless it is a recognizable savory recipe, or ingredients that do not make culinary sense together.
+- Every non-garnish ingredient in a cooked meal must have a clear role in the cooking or plating instructions. Do not append unused pantry foods merely to increase ingredient or nutrient coverage.
+- Do not combine a savory meat-and-starch breakfast with multiple unrelated sweet items. Choose one cohesive breakfast format and place at most one simple fruit side with it.
+- Do not list both a specific green such as spinach and generic "leafy greens." Name one exact vegetable. Mashed-potato and legume meals must be a recognizable preparation such as a shepherd-style pie, stew, or croquette—not a generic inventory bowl.
 - Use available kitchen items where they fit naturally. Mark them on-hand. You may add goal-supportive missing foods and mark them needed so the app can build a shopping list.
 - Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
@@ -195,6 +198,50 @@ Return only schema-valid JSON.`;
 }
 
 const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const CULINARY_GARNISH = /\b(salt|pepper|seasoning|spice|herb|thyme|paprika|garlic|cumin|oregano|basil|rosemary|cinnamon|oil)\b/;
+const SAVORY_PROTEIN = /\b(chicken|turkey|beef|pork|ham|sausage|fish|salmon|tuna|shrimp)\b/;
+const SWEET_BREAKFAST_COMPONENT = /\b(banana|berries|berry|mango|dragon fruit|melon|peach|pear|apple|pineapple|nut butter|peanut butter|maple|honey)\b/;
+const LEGUME = /\b(bean|beans|lentil|lentils|chickpea|chickpeas)\b/;
+
+function assertCulinaryCoherence(meal, ingredients, dayNumber) {
+  if (["Smoothie", "Snack"].includes(meal.meal)) return;
+  const dish = normalize(meal.food);
+  const ingredientNames = ingredients.map((item) => normalize(item.name));
+  const instructions = normalize((meal.instructions || []).join(" "));
+  const label = `Day ${dayNumber} ${meal.meal}`;
+
+  const hasGenericGreens = ingredientNames.some((name) => /\bleafy greens\b/.test(name));
+  const hasSpecificGreens = ingredientNames.some((name) => /\b(spinach|kale|collard|chard|arugula)\b/.test(name));
+  if (hasGenericGreens && hasSpecificGreens) {
+    throw new Error(`${label} duplicated leafy greens instead of defining one coherent vegetable.`);
+  }
+
+  if (meal.requiresCooking && ingredients.length >= 4) {
+    const omitted = ingredientNames.filter((name) => {
+      if (!name || CULINARY_GARNISH.test(name)) return false;
+      const meaningful = name.split(" ").filter((token) => token.length >= 4 && !/^(fresh|frozen|cooked|whole|plain|sliced|chopped)$/.test(token));
+      return meaningful.length > 0 && !meaningful.some((token) => instructions.includes(token));
+    });
+    if (omitted.length) {
+      throw new Error(`${label} cooking instructions did not account for: ${omitted.join(", ")}.`);
+    }
+  }
+
+  if (meal.meal === "Breakfast" && ingredientNames.some((name) => SAVORY_PROTEIN.test(name))) {
+    const sweetComponents = ingredientNames.filter((name) => SWEET_BREAKFAST_COMPONENT.test(name));
+    if (sweetComponents.length > 1 && !/\b(hash|sandwich|wrap|taco|burrito)\b/.test(dish)) {
+      throw new Error(`${label} combined a savory meat plate with too many unrelated sweet breakfast components.`);
+    }
+  }
+
+  const hasMash = ingredientNames.some((name) => /\bmashed potato/.test(name));
+  const hasLegume = ingredientNames.some((name) => LEGUME.test(name));
+  const vegetableCount = ingredientNames.filter((name) => /\b(carrot|spinach|kale|greens|broccoli|cauliflower|pepper|tomato|zucchini)\b/.test(name)).length;
+  if (["Lunch", "Dinner"].includes(meal.meal) && hasMash && hasLegume && vegetableCount > 2 && !/\b(shepherd|cottage|pie|stew|croquette)\b/.test(dish)) {
+    throw new Error(`${label} was an undefined inventory bowl rather than a recognizable mashed-potato and legume recipe.`);
+  }
+}
 
 export function validateMealPlanProposal(proposal, context) {
   if (!proposal || !Array.isArray(proposal.days) || proposal.days.length !== context.days) throw new Error("Incorrect number of days.");
@@ -227,6 +274,7 @@ export function validateMealPlanProposal(proposal, context) {
         const quantityValidation = validateMealIngredientQuantity({ quantity, name });
         return { quantity, name, availability: onHand ? "on-hand" : "needed", quantityValidation };
       });
+      assertCulinaryCoherence(meal, ingredients, dayIndex + 1);
       const dishKey = normalize(meal.food);
       if (seen.has(dishKey)) throw new Error("Duplicate dish in the same day.");
       if (planDishes.has(dishKey)) throw new Error("The AI plan repeated a dish across multiple days.");

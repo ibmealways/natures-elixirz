@@ -50,4 +50,38 @@ describe("meal plan AI contract", () => {
     assert.deepEqual(plan[0].meals[0].ingredients.map((item) => item.name), ["Dragon fruit", "Hemp protein"]);
     assert.deepEqual(plan[0].meals[0].ingredients.map((item) => item.quantity), ["3/4 cup", "1 1/8 scoop"]);
   });
+
+  it("rejects a disconnected savory breakfast with unrelated sweet components", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const breakfast = {
+      ...meal("Breakfast", "Chicken thighs and mashed potatoes breakfast with fruit and peanut butter"),
+      ingredients: [
+        { quantity: "4 oz", name: "Chicken thighs", availability: "needed" },
+        { quantity: "3/4 cup", name: "Mashed potatoes", availability: "needed" },
+        { quantity: "1 cup", name: "Dragon fruit", availability: "needed" },
+        { quantity: "1 tbsp", name: "Peanut butter", availability: "needed" },
+        { quantity: "1 cup", name: "Banana", availability: "needed" },
+      ],
+      instructions: ["Cook chicken safely.", "Warm mashed potatoes.", "Serve dragon fruit on the side."],
+    };
+    const proposal = { summary: "Incoherent breakfast.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), breakfast, meal("Lunch", "Lunch option"), meal("Snack", "Snack option"), meal("Dinner", "Dinner option")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /did not account for|unrelated sweet/i);
+  });
+
+  it("rejects duplicate greens in a generic mashed-potato and bean bowl", () => {
+    const context = buildMealPlanContext({}, { goal: "nervous", days: 1 });
+    const lunch = {
+      ...meal("Lunch", "Red kidney beans lunch bowl with mashed potatoes, carrot, spinach, leafy greens"),
+      ingredients: [
+        { quantity: "4 oz", name: "Red kidney beans", availability: "needed" },
+        { quantity: "3/4 cup", name: "Mashed potatoes", availability: "needed" },
+        { quantity: "1 cup", name: "Carrot", availability: "needed" },
+        { quantity: "1 cup", name: "Spinach", availability: "needed" },
+        { quantity: "1 cup", name: "Leafy greens", availability: "needed" },
+      ],
+      instructions: ["Warm the beans and mashed potatoes.", "Cook the carrot, spinach, and leafy greens, then combine."],
+    };
+    const proposal = { summary: "Incoherent lunch.", days: [{ day: 1, meals: [meal("Smoothie", "Smoothie option"), meal("Breakfast", "Breakfast option"), lunch, meal("Snack", "Snack option"), meal("Dinner", "Dinner option")] }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /duplicated leafy greens/i);
+  });
 });
