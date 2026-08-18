@@ -868,7 +868,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
   throw new HttpsError("unavailable", "AI smoothie generation is temporarily unavailable.");
 });
 
-export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSeconds: 180, memory: "1GiB", invoker: "public", enforceAppCheck }, async (request) => {
+export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSeconds: 300, memory: "1GiB", invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to generate a personalized meal plan.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating a personalized meal plan.");
   const uid = request.auth.uid;

@@ -134,8 +134,8 @@ export default function MealPlanLab() {
     saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "", smoothieFingerprint });
   }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieFingerprint]);
   const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
-  const generationFailed = ["failed", "blocked"].includes(generationStatus);
-  const plan = generationFailed ? [] : (generated || sample);
+  const generationHasNoDisplayablePlan = ["loading", "failed", "blocked"].includes(generationStatus);
+  const plan = generationHasNoDisplayablePlan ? [] : (generated || sample);
   const groceries = buildGroceryList(plan, generationContext.kitchenItems);
   const selectedGoal = goals.find(([value]) => value === goal) || goals.find(([value]) => value === "general");
   const journey = getWellnessJourney(storageScope);
@@ -229,7 +229,7 @@ export default function MealPlanLab() {
     setGenerationMessage(`Astra is building a ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || "personalized"} plan from your synchronized profile and kitchen inventory.`);
     try {
       if (!functions || requestedDays > 7) throw new Error(requestedDays > 7 ? "Thirty-day AI planning is not yet enabled." : "AI service is unavailable.");
-      const callable = httpsCallable(functions, "generateSmartMealPlan", { timeout: 60000 });
+      const callable = httpsCallable(functions, "generateSmartMealPlan", { timeout: 285000 });
       const result = await callable({
         goal: requestedNutritionGoal,
         goalLabel: goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal,
