@@ -47,6 +47,14 @@ describe("meal plan AI contract", () => {
     assert.throws(() => validateMealPlanProposal(proposal, context), /repeated a dish/i);
   });
 
+  it("rejects superficial ingredient swaps within the same meal format", () => {
+    const context = buildMealPlanContext({}, { goal: "muscles", days: 2 });
+    const dayOne = [meal("Smoothie", "Berry smoothie"), meal("Breakfast", "Spinach eggs with toast and kiwi"), meal("Lunch", "Tuna salad sandwich"), meal("Snack", "Apple yogurt cup"), meal("Dinner", "Chicken and rice plate")];
+    const dayTwo = [meal("Smoothie", "Mango smoothie"), meal("Breakfast", "Spinach eggs with toast and blueberries"), meal("Lunch", "Chicken wrap"), meal("Snack", "Grape snack plate"), meal("Dinner", "Bean chili")];
+    const proposal = { summary: "Superficial breakfast variation.", days: [{ day: 1, meals: dayOne }, { day: 2, meals: dayTwo }] };
+    assert.throws(() => validateMealPlanProposal(proposal, context), /repeated the same breakfast culinary format/i);
+  });
+
   it("anchors day one to the exact Tier 1 smoothie handoff", () => {
     const context = buildMealPlanContext({}, { goal: "muscles", days: 1, crossTierContext: { smoothie: {
       recipeName: "Dragon Fruit Apple Golden Protein Smoothie",

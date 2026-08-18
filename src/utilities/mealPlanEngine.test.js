@@ -194,6 +194,15 @@ describe("generateMealPlan", () => {
     expect(meals.map((meal) => meal.food).join(" ")).not.toMatch(/breakfast with .* and .* and .* and|coherent snack plate or bowl/i);
   });
 
+  it("rotates meal formats instead of treating a fruit swap as a new dish", () => {
+    const kitchenItems = ["Eggs", "Plain Greek yogurt", "Chicken thighs", "Canned Tuna", "Red Kidney Beans", "Bread", "Oats", "Rice", "Apple", "Mixed berries", "Blueberries", "Spinach", "Broccoli", "Carrot", "Cucumber", "Chia seeds", "Peanut butter"];
+    const plan = generateMealPlan({}, "metabolic", 3, { kitchenItems });
+    for (const moment of ["Breakfast", "Lunch", "Snack", "Dinner"]) {
+      const dishes = plan.map((day) => day.meals.find((meal) => meal.meal === moment).food);
+      expect(new Set(dishes).size).toBe(3);
+    }
+  });
+
   it("substitutes animal foods for vegan profiles", () => {
     const plan = generateMealPlan({ dietaryPattern: "vegan" }, "heart", 1);
     expect(plan[0].meals.some((meal) => meal.food.includes("salmon"))).toBe(false);

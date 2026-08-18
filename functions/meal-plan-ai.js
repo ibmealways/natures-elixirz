@@ -184,7 +184,9 @@ Requirements:
 - Use available kitchen items where they fit naturally. Mark them on-hand. You may add goal-supportive missing foods and mark them needed so the app can build a shopping list.
 - Treat explicit feedback as a soft preference: avoid repeating disliked plan selections and favor preferred foods only when they remain safe, balanced, coherent, and suitable for the current goal. Feedback never overrides allergies, avoid lists, medication cautions, or professional-review flags.
 - Pantry availability must not override safety, dietary restrictions, culinary coherence, or the selected rhythm.
-- Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner. Avoid repeating the same dish or dominant ingredients across days.
+- Exactly five entries per day in this order: Smoothie, Breakfast, Lunch, Snack, Dinner.
+- Every day must use a different culinary format for Breakfast, Lunch, Snack, and Dinner. Changing only the fruit, vegetable, yogurt flavor, seasoning, or side does not create a different dish. For example, do not repeat eggs with toast on multiple days, tuna sandwiches on multiple days, yogurt cups on multiple days, or fried rice on multiple days.
+- Across a multi-day plan, rotate cooking methods and recognizable formats such as an omelet, oatmeal, parfait, toast, soup, wrap, grain bowl, salad, roasted plate, skillet, and baked snack while keeping each choice appropriate to its meal occasion.
 - Quantities are for one adult serving and must use familiar English measurements such as 1 cup, 3/4 cup, 1/2 cup, 1/4 cup, tbsp, tsp, pinch, oz, piece, or count. Do not use decimals.
 - For a linked branded product, use its exact linked ingredient name and a compatible label serving unit. Package values are subscriber-entered and schema-validated, not independently laboratory-verified.
 - Smoothies require blending instructions. Cooked meals need concise, food-safe instructions. Include ordinary culinary herbs or spices where appropriate; do not prescribe supplements or medicinal doses.
@@ -209,7 +211,20 @@ const EGG = /\b(egg|eggs)\b/;
 const DAIRY_PROTEIN = /\b(yogurt|cottage cheese)\b/;
 const FRUIT = /\b(apple|banana|berries|berry|blueberr|strawberr|raspberr|blackberr|mango|orange|peach|pear|pineapple|melon|kiwi|fruit)\b/;
 const BREAKFAST_GRAIN = /\b(oat|oats|oatmeal|bread|toast|waffle|pancake|quinoa)\b/;
-const RECOGNIZABLE_DISH = /\b(scramble|omelet|frittata|oatmeal|overnight oats|pudding|parfait|bowl|toast|sandwich|wrap|salad|soup|stew|chili|taco|burrito|curry|stir fry|fried rice|skillet|pasta|roast|roasted|baked|grilled|plate|chicken and waffles)\b/;
+const RECOGNIZABLE_DISH = /\b(scramble|omelet|frittata|oatmeal|overnight oats|pudding|parfait|bowl|yogurt cup|toast|sandwich|wrap|salad|soup|stew|chili|taco|burrito|curry|stir fry|fried rice|skillet|pasta|roast|roasted|baked|grilled|plate|chicken and waffles)\b/;
+
+function culinaryFormatKey(meal) {
+  const dish = normalize(meal.food);
+  const formats = [
+    "overnight oats", "fried rice", "chicken and waffles", "breakfast sandwich", "breakfast burrito",
+    "egg bite", "snack plate", "grain bowl", "yogurt cup", "yogurt breakfast bowl",
+    "omelet", "frittata", "scramble", "oatmeal", "pudding", "parfait", "toast", "sandwich",
+    "wrap", "salad", "soup", "stew", "chili", "taco", "burrito", "curry", "stir fry",
+    "skillet", "pasta", "roast", "roasted", "baked", "grilled", "bowl", "plate",
+  ];
+  const format = formats.find((candidate) => dish.includes(candidate)) || dish;
+  return `${meal.meal}:${format}`;
+}
 
 function assertCulinaryCoherence(meal, ingredients, dayNumber) {
   if (meal.meal === "Smoothie") return;
@@ -303,6 +318,7 @@ export function validateMealPlanProposal(proposal, context) {
     .split(/[,;\n]/).map(normalize).filter((item) => item.length > 2);
   const kitchen = context.kitchenItems.map(normalize);
   const planDishes = new Set();
+  const planFormats = new Set();
   return proposal.days.map((day, dayIndex) => {
     if (!Array.isArray(day.meals) || day.meals.length !== 5) throw new Error(`Day ${dayIndex + 1} must have five meals.`);
     const seen = new Set();
@@ -332,8 +348,11 @@ export function validateMealPlanProposal(proposal, context) {
       const dishKey = normalize(meal.food);
       if (seen.has(dishKey)) throw new Error("Duplicate dish in the same day.");
       if (planDishes.has(dishKey)) throw new Error("The AI plan repeated a dish across multiple days.");
+      const formatKey = culinaryFormatKey(meal);
+      if (planFormats.has(formatKey)) throw new Error(`The AI plan repeated the same ${meal.meal.toLowerCase()} culinary format across multiple days.`);
       seen.add(dishKey);
       planDishes.add(dishKey);
+      planFormats.add(formatKey);
       const nutritionIntelligence = assertNutritionSafety(assessNutritionSelection({
         ingredients,
         profile: context.profile,

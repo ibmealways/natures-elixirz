@@ -353,8 +353,36 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
   const vegetable = any(["Vegetable"], 2);
   const secondVegetable = any(["Vegetable"], 4, vegetable ? new RegExp(`^${vegetable.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") : /$^/);
   const seed = any(["Seed", "Nut butter"], 3);
+  const nutButter = take(/nut butter|peanut butter|almond butter|seed butter/, ["Nut butter"]);
+  const dinnerProtein = any(["Protein"], 0, /powder|collagen|cold cuts?|deli|pepperoni|eggs?|yogurt|cottage cheese|beans?|lentils?|chickpeas?|tofu|tempeh|tuna/);
 
-  const recipe = (() => {
+  // Build every complete, credible dish available for this moment, then rotate
+  // by day. A fruit, flavor, seasoning, or side swap is not treated as a new
+  // culinary format.
+  const candidates = [];
+  if (moment === "Breakfast") {
+    if (egg && bread && (vegetable || fruit)) candidates.push({ food: `${vegetable ? `${vegetable.name} eggs` : "Eggs"} with ${bread.name}${fruit ? ` and a ${fruit.name} side` : ""}`, items: [egg, bread, vegetable, fruit], requiresCooking: true, steps: [proteinPreparationInstruction(egg.name), `Toast or warm ${bread.name}.`, ...(vegetable ? [`Sauté ${vegetable.name} until tender, then fold it into the eggs.`] : []), ...(fruit ? [`Wash and portion ${fruit.name} as a separate fresh side.`] : [])] });
+    if (yogurt && fruit && (seed || oats)) candidates.push({ food: `${fruit.name} yogurt breakfast bowl with ${(oats || seed).name}${oats && seed ? ` and ${seed.name}` : ""}`, items: [yogurt, fruit, oats, seed], requiresCooking: false, steps: [`Spoon ${yogurt.name} into a bowl.`, `Top with ${fruit.name}${oats ? ` and ${oats.name}` : ""}${seed ? ` and ${seed.name}` : ""}.`, "Serve chilled as one composed breakfast."] });
+    if (oats && fruit) candidates.push({ food: `${fruit.name} oatmeal${seed ? ` with ${seed.name}` : ""}`, items: [oats, fruit, seed], requiresCooking: true, steps: [`Cook ${oats.name} with water according to its package directions.`, `Fold in or top with ${fruit.name}.`, ...(seed ? [`Finish with ${seed.name}.`] : [])] });
+    if (chicken && waffles) candidates.push({ food: `Chicken and waffles${fruit ? ` with ${fruit.name}` : ""}`, items: [chicken, waffles, fruit], requiresCooking: true, steps: [proteinPreparationInstruction(chicken.name), `Heat ${waffles.name} until crisp.`, ...(fruit ? [`Serve ${fruit.name} as a separate fresh side.`] : []), "Plate the chicken and waffles together."] });
+  } else if (moment === "Lunch") {
+    if (tuna && bread && vegetable) candidates.push({ food: `${tuna.name} salad sandwich with ${vegetable.name}`, items: [tuna, bread, vegetable], requiresCooking: false, steps: [`Drain ${tuna.name}; it is already cooked, so follow its package directions.`, `Combine it with finely chopped ${vegetable.name}.`, `Spoon the tuna mixture onto ${bread.name}.`, "Serve chilled; keep leftovers refrigerated."] });
+    const lunchProtein = chicken || fish;
+    if (lunchProtein && rice && vegetable) candidates.push({ food: `${lunchProtein.name} with ${rice.name}, ${vegetable.name}${secondVegetable ? `, and ${secondVegetable.name}` : ""}`, items: [lunchProtein, rice, vegetable, secondVegetable], requiresCooking: true, steps: [proteinPreparationInstruction(lunchProtein.name), `Cook ${rice.name} according to its package directions.`, `Sauté or roast ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables as one meal."] });
+    if (legume && rice && vegetable) candidates.push({ food: `${legume.name} and ${rice.name} vegetable bowl`, items: [legume, rice, vegetable, secondVegetable], requiresCooking: true, steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `Cook ${rice.name} according to its package directions.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Combine the beans, grain, and vegetables in one bowl."] });
+    if (deli && bread && vegetable) candidates.push({ food: `${deli.name} sandwich with ${vegetable.name}`, items: [deli, bread, vegetable], requiresCooking: false, steps: [`Keep ${deli.name} refrigerated and follow its ready-to-eat package directions.`, `Layer it with ${vegetable.name} on ${bread.name}.`, "Serve promptly and refrigerate leftovers."] });
+  } else if (moment === "Snack") {
+    if (yogurt && fruit) candidates.push({ food: `${fruit.name} yogurt cup${seed ? ` with ${seed.name}` : ""}`, items: [yogurt, fruit, seed], requiresCooking: false, steps: [`Spoon ${yogurt.name} into a small bowl.`, `Top with ${fruit.name}${seed ? ` and ${seed.name}` : ""}.`, "Serve chilled."] });
+    if (fruit && nutButter) candidates.push({ food: `${fruit.name} with ${nutButter.name}`, items: [fruit, nutButter], requiresCooking: false, steps: [`Wash and portion ${fruit.name}.`, `Serve with ${nutButter.name} for dipping or spreading.`] });
+    if (egg && vegetable) candidates.push({ food: `Hard-cooked egg and ${vegetable.name} snack plate`, items: [egg, vegetable], requiresCooking: true, steps: [`Hard-cook ${egg.name} until the whites and yolks are firm, then chill and peel.`, `Wash and portion ${vegetable.name}.`, "Arrange together as one snack plate."] });
+  } else if (moment === "Dinner") {
+    if (egg && rice && vegetable) candidates.push({ food: `Vegetable egg fried rice with ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [egg, rice, vegetable, secondVegetable], requiresCooking: true, steps: [proteinPreparationInstruction(egg.name), `Cook ${rice.name} and cool it briefly so the grains remain separate.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}, add the rice, then fold in the cooked egg.`, "Serve hot as one composed dish."] });
+    if (dinnerProtein && rice && vegetable) candidates.push({ food: `${dinnerProtein.name} with ${rice.name} and roasted ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [dinnerProtein, rice, vegetable, secondVegetable], requiresCooking: true, steps: [proteinPreparationInstruction(dinnerProtein.name), `Cook ${rice.name} according to its package directions.`, `Roast or sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables together."] });
+    if (legume && vegetable) candidates.push({ food: `${legume.name} and vegetable skillet${rice ? ` with ${rice.name}` : ""}`, items: [legume, vegetable, secondVegetable, rice], requiresCooking: true, steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, ...(rice ? [`Cook ${rice.name} according to its package directions.`] : []), "Combine and serve as one skillet meal."] });
+  }
+  const rotatedRecipe = candidates.length ? candidates[(dayIndex + variationSeed) % candidates.length] : null;
+
+  const recipe = rotatedRecipe || (() => {
     if (moment === "Breakfast") {
       if (egg && bread && (vegetable || fruit)) return {
         food: `${vegetable ? `${vegetable.name} eggs` : "Eggs"} with ${bread.name}${fruit ? ` and a ${fruit.name} side` : ""}`,
@@ -397,7 +425,6 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
     if (moment === "Snack") {
       if (yogurt && fruit) return { food: `${fruit.name} yogurt cup${seed ? ` with ${seed.name}` : ""}`, items: [yogurt, fruit, seed], requiresCooking: false,
         steps: [`Spoon ${yogurt.name} into a small bowl.`, `Top with ${fruit.name}${seed ? ` and ${seed.name}` : ""}.`, "Serve chilled."] };
-      const nutButter = take(/nut butter|peanut butter|almond butter|seed butter/, ["Nut butter"]);
       if (fruit && nutButter) return { food: `${fruit.name} with ${nutButter.name}`, items: [fruit, nutButter], requiresCooking: false,
         steps: [`Wash and portion ${fruit.name}.`, `Serve with ${nutButter.name} for dipping or spreading.`] };
       if (egg && vegetable) return { food: `Hard-cooked egg and ${vegetable.name} snack plate`, items: [egg, vegetable], requiresCooking: true,
@@ -406,7 +433,7 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
     if (moment === "Dinner") {
       if (egg && rice && vegetable && offset % 2 === 0) return { food: `Vegetable egg fried rice with ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [egg, rice, vegetable, secondVegetable], requiresCooking: true,
         steps: [proteinPreparationInstruction(egg.name), `Cook ${rice.name} and cool it briefly so the grains remain separate.`, `SautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}, add the rice, then fold in the cooked egg.`, "Serve hot as one composed dish."] };
-      const protein = any(["Protein"], 0, /powder|collagen|cold cuts?|deli|pepperoni|eggs?|yogurt|cottage cheese|beans?|lentils?|chickpeas?|tofu|tempeh|tuna/);
+      const protein = dinnerProtein;
       if (protein && rice && vegetable) return { food: `${protein.name} with ${rice.name} and roasted ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [protein, rice, vegetable, secondVegetable], requiresCooking: true,
         steps: [proteinPreparationInstruction(protein.name), `Cook ${rice.name} according to its package directions.`, `Roast or sautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables together."] };
       if (legume && vegetable) return { food: `${legume.name} and vegetable skillet${rice ? ` with ${rice.name}` : ""}`, items: [legume, vegetable, secondVegetable, rice], requiresCooking: true,
