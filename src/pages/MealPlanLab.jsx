@@ -134,7 +134,8 @@ export default function MealPlanLab() {
     saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "", smoothieFingerprint });
   }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieFingerprint]);
   const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
-  const plan = generated || sample;
+  const generationFailed = ["failed", "blocked"].includes(generationStatus);
+  const plan = generationFailed ? [] : (generated || sample);
   const groceries = buildGroceryList(plan, generationContext.kitchenItems);
   const selectedGoal = goals.find(([value]) => value === goal) || goals.find(([value]) => value === "general");
   const journey = getWellnessJourney(storageScope);
@@ -226,7 +227,6 @@ export default function MealPlanLab() {
     setGenerationStatus("loading");
     setNutritionIntelligence(null);
     setGenerationMessage(`Astra is building a ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || "personalized"} plan from your synchronized profile and kitchen inventory.`);
-    let nextPlan;
     try {
       if (!functions || requestedDays > 7) throw new Error(requestedDays > 7 ? "Thirty-day AI planning is not yet enabled." : "AI service is unavailable.");
       const callable = httpsCallable(functions, "generateSmartMealPlan", { timeout: 60000 });
@@ -256,11 +256,18 @@ export default function MealPlanLab() {
         astraRequest: astraTransfer ? { title: astraTransfer.title, ingredients: astraTransfer.ingredients, notes: astraTransfer.notes } : null,
       });
       if (requestEpoch !== planEpochRef.current) return;
-      nextPlan = result.data.plan;
+      const nextPlan = result.data.plan;
       setNutritionIntelligence(result.data.nutritionIntelligence || null);
       setMedicationSafety(result.data.medicationSafety || null);
       setGenerationStatus("ready");
       setGenerationMessage(`Validated AI plan created specifically for ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal}.`);
+      setGenerated(nextPlan);
+      recordMealJourney(requestedNutritionGoal, requestedDays, nextPlan, storageScope);
+      publishWellnessSignal(storageScope, "meals", { goal: requestedNutritionGoal, duration: requestedDays, selection: `${requestedDays}-day nourishment plan` });
+      setSaved(false);
+      setFeedbackStatus("");
+      generateVisuals(nextPlan[0], 0);
+      window.setTimeout(() => document.querySelector("#meal-constellation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     } catch (error) {
       if (requestEpoch !== planEpochRef.current) return;
       console.error("AI meal-plan generation failed", error);
@@ -270,20 +277,15 @@ export default function MealPlanLab() {
         setGenerationMessage(error?.message || "Generation is paused until clinician-established nutrition targets are saved.");
         return;
       }
-      nextPlan = generateMealPlan(profile, requestedNutritionGoal, requestedDays, { kitchenItems: generationContext.kitchenItems, variationSeed, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null });
-      setMedicationSafety(profile.medications ? { reviewRequired: true, status: "Pharmacist review advised", note: "The AI medication screen was unavailable. Confirm this backup plan with a pharmacist before relying on it alongside medication.", foodsAvoided: [] } : null);
-      setGenerationStatus("fallback");
+      setGenerated(null);
+      setMedicationSafety(null);
+      setNutritionIntelligence(null);
+      setGenerationStatus("failed");
       setGenerationMessage(requestedDays > 7
-        ? "Thirty-day plans currently use the rules-based planner. AI-generated plans are enabled for one-, three-, and seven-day horizons."
-        : "The dedicated Meal Plan AI was unavailable or its response failed validation. This result is a rules-based backup, not an AI-generated plan.");
+        ? "Thirty-day AI planning is not available yet. No substitute or template plan was created. Choose 1, 3, or 7 days and try again."
+        : "Astra could not produce a plan that passed every safety, quantity, and culinary check. No substitute or template plan was created. Please retry; recent validation findings will guide the next attempt.");
+      return;
     }
-    setGenerated(nextPlan);
-    recordMealJourney(requestedNutritionGoal, requestedDays, nextPlan, storageScope);
-    publishWellnessSignal(storageScope, "meals", { goal: requestedNutritionGoal, duration: requestedDays, selection: `${requestedDays}-day nourishment plan` });
-    setSaved(false);
-    setFeedbackStatus("");
-    generateVisuals(nextPlan[0], 0);
-    window.setTimeout(() => document.querySelector("#meal-constellation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 
   useEffect(() => {
@@ -340,9 +342,9 @@ export default function MealPlanLab() {
       </section>
       <NutritionFactsRegistry scope={storageScope} pantryItems={mealKitchenItems} activeIngredients={generated?.flatMap((day) => day.meals?.flatMap((meal) => meal.ingredients || []) || []) || []} activeFormulaName={generated ? `${days}-day meal plan` : ""} />
       <div className="ne-alert"><strong>Pre-generation inventory review:</strong> {isOnboarded ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total items from Pantry, Fridge, Freezer, and Smoothie pantry will be reviewed.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
-      {nutritionRisk.flags.length > 0 && <div className="ne-alert ne-alert-danger"><strong>{nutritionRisk.generationLimited ? "Clinician-target safety gate" : "Additional nutrition review"}:</strong> {nutritionRisk.message} {nutritionRisk.generationLimited ? "A rules-based backup will not bypass this protection if AI is unavailable." : "Saved restrictions remain mandatory; confirm individual targets with the appropriate clinician or pharmacist."}</div>}
+      {nutritionRisk.flags.length > 0 && <div className="ne-alert ne-alert-danger"><strong>{nutritionRisk.generationLimited ? "Clinician-target safety gate" : "Additional nutrition review"}:</strong> {nutritionRisk.message} {nutritionRisk.generationLimited ? "Generation remains blocked until the required clinician-established targets are saved." : "Saved restrictions remain mandatory; confirm individual targets with the appropriate clinician or pharmacist."}</div>}
       <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={() => generate(0)}>{generationStatus === "loading" ? <><Sparkles size={18} /> Astra is cultivating your plan…</> : !unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
-      {generationMessage && <div className={`ne-alert ${["fallback", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : "Rules-based backup"}:</strong> {generationMessage}</div>}
+      {generationMessage && <div className={`ne-alert ${["failed", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : generationStatus === "failed" ? "Plan not generated" : "Meal Plan status"}:</strong> {generationMessage}</div>}
       {medicationSafety && <div className={`ne-alert ${medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {medicationSafety.status}:</strong> {medicationSafety.note}{medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {medicationSafety.foodsAvoided.join(", ")}.</>} This screening cannot replace the medication label, pharmacist, or prescriber.</div>}
     </section>
 

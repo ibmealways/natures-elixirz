@@ -885,7 +885,11 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   }
   await consumeMealPlanGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
-  let feedback = "Generate the requested meal plan now.";
+  const recentFailureSnapshot = await db.collection(`users/${uid}/mealPlanAiFailures`).orderBy("createdAt", "desc").limit(3).get();
+  const recentFailures = recentFailureSnapshot.docs.flatMap((document) => document.data().validationFailures || []).slice(0, 6);
+  let feedback = recentFailures.length
+    ? `Generate the requested meal plan now. Learn from these recent validator findings and do not repeat them: ${recentFailures.join(" | ")}`
+    : "Generate the requested meal plan now.";
   const validationFailures = [];
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -914,7 +918,13 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
           catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
         }
         await recordGenerationOutcome("smartMealPlan", shouldRecordAiServiceIncident(error) ? "serviceFailed" : "validationFailed");
-        throw new HttpsError("unavailable", "AI meal planning could not produce a validated plan. A clearly labeled rules-based backup can still be shown.");
+        await db.collection(`users/${uid}/mealPlanAiFailures`).add({
+          goal: context.goal,
+          days: context.days,
+          validationFailures,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        throw new HttpsError("unavailable", "Astra could not produce a meal plan that passed every validation check. No substitute plan was created.", { reason: "validation-failed", attempts: 3 });
       }
     }
   }
