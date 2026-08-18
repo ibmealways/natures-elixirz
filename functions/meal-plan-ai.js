@@ -98,7 +98,16 @@ export function buildMealPlanContext(profile = {}, request = {}) {
       ingredients: (request.astraRequest.ingredients || []).slice(0, 24).map((item) => String(item?.name || "").slice(0, 80)).filter(Boolean),
       notes: cleanList(request.astraRequest.notes, 8),
     } : null,
-    kitchenItems: cleanList(request.kitchenItems),
+    kitchenItems: cleanList(request.kitchenItems).flatMap((source) => {
+      if (/cold cuts?|deli meat/i.test(source) && /\(([^)]+)\)/.test(source)) {
+        const components = source.match(/\(([^)]+)\)/)?.[1]
+          ?.split(/,|\band\b/i)
+          .map((name) => name.trim())
+          .filter(Boolean) || [];
+        if (components.length > 1) return components;
+      }
+      return [source];
+    }),
     nutritionLabels: validateNutritionLabels(request.nutritionLabels),
     smoothieContext: rawSmoothie ? {
       recipeName: String(rawSmoothie.recipeName || "").slice(0, 120),

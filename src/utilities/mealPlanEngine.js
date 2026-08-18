@@ -161,8 +161,15 @@ function adaptForRestrictions(text, profile = {}) {
 }
 
 function recognizeKitchen(items = []) {
-  return items.map((source) => {
+  return items.flatMap((source) => {
     const normalized = source.toLowerCase().trim();
+    if (/cold cuts?|deli meat/.test(normalized) && /\(([^)]+)\)/.test(source)) {
+      const components = source.match(/\(([^)]+)\)/)?.[1]
+        ?.split(/,|\band\b/i)
+        .map((name) => name.trim())
+        .filter(Boolean) || [];
+      if (components.length > 1) return components.map((name) => ({ name, group: "Protein", source }));
+    }
     const match = pantryCatalog.find((entry) => entry.aliases.some((alias) => alias === normalized)
       || entry.name.toLowerCase() === normalized);
     if (match) return { ...match, source };
@@ -174,7 +181,7 @@ function recognizeKitchen(items = []) {
     if (/milk|yogurt|cheese|cottage cheese/.test(normalized)) return { name: source, group: "Protein", source };
     if (/bean|lentil|chickpea|tofu|tempeh/.test(normalized)) return { name: source, group: "Protein", source };
     if (/oil|avocado/.test(normalized)) return { name: source, group: "Fat", source };
-    return null;
+    return [];
   }).filter(Boolean);
 }
 

@@ -20,6 +20,10 @@ const meal = (type, food = DEFAULT_DISHES[type]) => ({
 });
 
 describe("meal plan AI contract", () => {
+  it("expands a pantry deli assortment into separately selectable ingredients", () => {
+    const context = buildMealPlanContext({}, { days: 1, kitchenItems: ["Cold Cuts (Ham, Cheese, Pepperoni, Buffalo Chicken)"] });
+    assert.deepEqual(context.kitchenItems, ["Ham", "Cheese", "Pepperoni", "Buffalo Chicken"]);
+  });
   it("carries the selected goal and inventory into its instructions", () => {
     const context = buildMealPlanContext({ dietaryPattern: "omnivore" }, { goal: "muscles", goalLabel: "Muscle nourishment", days: 1, kitchenItems: ["Chicken"], learning: { source: "explicit-subscriber-feedback", dislikedSelections: ["Repeated chicken plan"] } });
     const instructions = buildMealPlanInstructions(context);
