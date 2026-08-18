@@ -165,6 +165,26 @@ describe("generateMealPlan", () => {
     });
   });
 
+  it("keeps goal accents from corrupting complete pantry recipes", () => {
+    const kitchenItems = ["Red Kidney Beans", "Bread", "Eggs", "Rice", "Chicken Thighs", "Plain Greek yogurt", "Kiwi", "Chia seeds", "Cucumber", "Apple", "Broccoli", "Spinach", "Cherry tomatoes"];
+    const plans = Array.from({ length: 16 }, (_, variationSeed) => generateMealPlan({}, "joints", 1, { kitchenItems, variationSeed }));
+    plans.forEach((plan) => {
+      const breakfast = plan[0].meals.find((meal) => meal.meal === "Breakfast");
+      const lunch = plan[0].meals.find((meal) => meal.meal === "Lunch");
+      const snack = plan[0].meals.find((meal) => meal.meal === "Snack");
+      expect(breakfast.food).not.toMatch(/kidney beans?/i);
+      expect(lunch.ingredients.filter((item) => /chicken|salmon|tuna|fish/i.test(item.name)).length).toBeLessThanOrEqual(1);
+      if (/yogurt/i.test(snack.food)) expect(snack.ingredients.map((item) => item.name).join(" ")).not.toMatch(/salmon|fish|beans?/i);
+    });
+  });
+
+  it("uses slice and cup units for bread and cooked legumes", () => {
+    const plan = generateMealPlan({}, "general", 5, { kitchenItems: ["Eggs", "Bread", "Red Kidney Beans", "Rice", "Spinach", "Apple"] });
+    const ingredients = plan.flatMap((day) => day.meals).flatMap((meal) => meal.ingredients);
+    ingredients.filter((item) => /bread/i.test(item.name)).forEach((item) => expect(item.quantity).toMatch(/slice/));
+    ingredients.filter((item) => /kidney beans/i.test(item.name)).forEach((item) => expect(item.quantity).toMatch(/cup/));
+  });
+
   it("substitutes animal foods for vegan profiles", () => {
     const plan = generateMealPlan({ dietaryPattern: "vegan" }, "heart", 1);
     expect(plan[0].meals.some((meal) => meal.food.includes("salmon"))).toBe(false);

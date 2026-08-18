@@ -201,7 +201,9 @@ function pantryQuantity(item, fallback = "1 cup") {
   if (item.group === "Protein" && /powder|collagen/.test(name)) return "1 scoop";
   if (item.group === "Protein" && /egg/.test(name)) return "2";
   if (item.group === "Protein" && /yogurt|cottage cheese/.test(name)) return "3/4 cup";
+  if (item.group === "Protein" && /bean|lentil|chickpea/.test(name)) return "3/4 cup";
   if (item.group === "Protein") return "4 oz";
+  if (item.group === "Grain" && /bread|toast/.test(name)) return "1 slice";
   if (item.group === "Grain") return "3/4 cup cooked";
   if (item.group === "Fat") return "1 tbsp";
   if (item.group === "Fruit" || item.group === "Vegetable") return "1 cup";
@@ -221,7 +223,7 @@ function goalAccentQuantity(name = "") {
 
 function accentFitsMoment(accent = "", moment = "") {
   const value = accent.toLowerCase();
-  if (moment === "Snack") return !/beans?|lentils?|chickpeas?|tofu|tempeh|rice|potato|meat|chicken|fish|tuna/.test(value);
+  if (moment === "Snack") return !/beans?|lentils?|chickpeas?|tofu|tempeh|rice|potato|meat|chicken|fish|tuna|salmon/.test(value);
   if (moment === "Breakfast") return !/beans?|lentils?|chickpeas?|fish|tuna|cold cuts?|pork ribs/.test(value);
   return !/oats?|nut butter|seed butter|plain yogurt|mixed berries|banana/.test(value);
 }
@@ -254,7 +256,7 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
     : moment === "Snack"
       ? /powder|collagen|cold cuts?|deli|pepperoni|chicken|turkey|pork|beef|steak|tuna|salmon|fish/
       : moment === "Breakfast"
-        ? /powder|collagen|cold cuts?|deli|pepperoni|tuna|salmon|fish|pork ribs?|steak|ground meat|ground beef/
+        ? /powder|collagen|cold cuts?|deli|pepperoni|tuna|salmon|fish|pork ribs?|steak|ground meat|ground beef|beans?|lentils?|chickpeas?/
         : /powder|collagen/;
   const grainReject = moment === "Lunch" || moment === "Dinner" ? /waffle|pancake|oats?/ : moment === "Breakfast" ? /knorr|rice sides?|mashed potato/ : /$^/;
   const protein = pickKitchen(available, ["Protein"], offset, proteinReject);
@@ -280,7 +282,9 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const incompatibleWaffleAccent = isWaffleBreakfast && isSavoryProtein && /nut butter|seed butter/i.test(targetAccent);
   const compatibleAccent = accentFitsMoment(targetAccent, moment)
     && !(moment === "Snack" && /yogurt|fruit|berry|kiwi|apple|banana/i.test(unique.map((item) => item.name).join(" ")) && /beans?|lentils?|chickpeas?/.test(targetAccent.toLowerCase()));
-  if (!hasGoalAccent && !incompatibleWaffleAccent && compatibleAccent) ingredients.push({ quantity: goalAccentQuantity(targetAccent), name: targetAccent, availability: "needed" });
+  // A wellness goal may rank compatible foods, but it must never bolt an
+  // unrelated extra ingredient onto an otherwise complete recipe.
+  if (!hasGoalAccent && !incompatibleWaffleAccent && compatibleAccent && unique.length < 3) ingredients.push({ quantity: goalAccentQuantity(targetAccent), name: targetAccent, availability: "needed" });
   const names = ingredients.map((item) => item.name);
   const vegetableNames = [vegetable?.name, secondVegetable?.name].filter(Boolean).join(" and ");
   const eggRiceDinner = moment === "Dinner" && /egg/i.test(protein?.name || "") && /rice/i.test(grain?.name || "");
