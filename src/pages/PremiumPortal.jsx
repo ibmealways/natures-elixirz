@@ -141,7 +141,7 @@ export default function PremiumPortal() {
         </section>
 
         <section className="membership-console kernel-picker" aria-labelledby="kernel-picker-title">
-          <div><p className="portal-eyebrow">Build your membership</p><h2 id="kernel-picker-title">Select your Kernels</h2><p>We recommend starting with Smoothies when it fits your routine. Blending creates a convenient, drinkable texture and can make it easier to consume a varied combination of whole foods. Digestion and nutrient absorption still vary by ingredient and by person.</p></div>
+          <div><p className="portal-eyebrow">Build your membership</p><h2 id="kernel-picker-title">Select your Kernels</h2><p>We recommend beginning with the Smoothies Kernel when it fits your routine. Each Elixirz brings fruits, vegetables, herbs, spices, seeds, proteins, and liquids together in one drinkable whole-food matrix. Blending changes the ingredients&apos; physical structure, while digestion breaks that matrix down so nutrients and other food compounds can be absorbed and used throughout the body. Ingredients eaten together can influence digestion and nutrient bioavailability differently than those same foods eaten separately, although the effect varies by ingredient, preparation, serving, and person and is not always an increase.</p></div>
           <div className="kernel-picker__choices">
             {kernelChoices.map(({ id, name, description, icon: Icon }) => {
               const selected = selectedKernels.includes(id);
