@@ -181,6 +181,7 @@ function recognizeKitchen(items = []) {
 function pantryEligible(item, profile = {}) {
   const name = item.name.toLowerCase();
   const restrictions = restrictionText(profile);
+  if (isAmbiguousDeliAssortment(name)) return false;
   if (restrictions.split(/[,;\n]/).map((value) => value.trim()).filter(Boolean).some((value) => name.includes(value) || value.includes(name))) return false;
   if (profile.dietaryPattern === "vegan" && /egg|chicken|turkey|tuna|salmon|fish|beef|steak|pork|sausage|bacon|milk|yogurt|cheese/.test(name)) return false;
   if (profile.dietaryPattern === "vegetarian" && /chicken|turkey|tuna|salmon|fish|beef|steak|pork|sausage|bacon/.test(name)) return false;
@@ -190,6 +191,12 @@ function pantryEligible(item, profile = {}) {
 function pickKitchen(items, groups, offset, reject = /$^/) {
   const matches = items.filter((item) => groups.includes(item.group) && !reject.test(item.name.toLowerCase()));
   return matches.length ? matches[offset % matches.length] : null;
+}
+
+function isAmbiguousDeliAssortment(name = "") {
+  const normalized = name.toLowerCase();
+  const deliMatches = normalized.match(/\b(ham|pepperoni|salami|chicken|turkey|bologna|cheese)\b/g) || [];
+  return /cold cuts?|deli meat/.test(normalized) && new Set(deliMatches).size > 1;
 }
 
 function pantryQuantity(item, fallback = "1 cup") {
@@ -344,7 +351,8 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
   const fish = take(/salmon|fish/, ["Protein"]);
   const tuna = take(/tuna/, ["Protein"]);
   const legume = take(/bean|lentil|chickpea/, ["Protein"]);
-  const deli = take(/cold cuts?|deli|ham/, ["Protein"]);
+  const deliMatches = matches(/cold cuts?|deli|ham/, ["Protein"]).filter((item) => !isAmbiguousDeliAssortment(item.name));
+  const deli = deliMatches.length ? deliMatches[offset % deliMatches.length] : null;
   const bread = take(/bread|toast|tortilla/, ["Grain"]);
   const waffles = take(/waffle/, ["Grain"]);
   const oats = take(/\boats?\b/, ["Grain"]);

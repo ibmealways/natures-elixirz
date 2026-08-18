@@ -97,11 +97,12 @@ describe("generateMealPlan", () => {
     expect(companionFoods(pearPlan).join(" ").toLowerCase()).not.toContain("spinach");
   });
 
-  it("keeps deli meat, oats, waffles, and pork in coherent meal roles", () => {
+  it("rejects ambiguous deli assortments while keeping oats, waffles, and pork in coherent roles", () => {
     const kitchenItems = ["Cold Cuts (Ham, Cheese, Pepperoni, Buffalo Chicken)", "Pork tenderloin", "Eggs", "Rice", "Waffles", "Oats", "Idaho Mashed Potatoes", "Blackberries", "Broccoli", "Spinach", "Cherry tomatoes", "Nut butter"];
     const meals = Array.from({ length: 20 }, (_, variationSeed) => generateMealPlan({}, "healthyWeight", 1, { kitchenItems, variationSeed })[0].meals).flat();
     const deliMeals = meals.filter((meal) => /cold cuts?/i.test(meal.food));
-    expect(deliMeals.length).toBeGreaterThan(0);
+    expect(deliMeals).toHaveLength(0);
+    expect(meals.flatMap((meal) => meal.ingredients).map((item) => item.name).join(" ")).not.toMatch(/Cold Cuts \(Ham, Cheese, Pepperoni, Buffalo Chicken\)/i);
     deliMeals.forEach((meal) => {
       expect(meal.food).not.toMatch(/oats?/i);
       expect(meal.instructions.join(" ")).not.toMatch(/165°F/);
