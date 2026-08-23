@@ -228,4 +228,25 @@ describe("generateMealPlan", () => {
     expect(list.foundations.length).toBeGreaterThan(3);
     expect(new Set(list.plannedMeals).size).toBe(list.plannedMeals.length);
   });
+
+  it("excludes exact household water and ice staples without hiding coconut water", () => {
+    const plan = [{
+      day: 1,
+      meals: [{
+        meal: "Smoothie",
+        food: "Hydration blend",
+        ingredients: [
+          { quantity: "1 cup", name: "Water" },
+          { quantity: "1/2 cup", name: "Ice cubes" },
+          { quantity: "1 cup", name: "Coconut water" },
+        ],
+      }],
+    }];
+    const list = buildGroceryList(plan, []);
+    expect(list.stapleDetails.map((item) => item.name)).toEqual(expect.arrayContaining(["Water", "Ice cubes"]));
+    expect(list.missingDetails.map((item) => item.name)).toContain("Coconut water");
+    expect(list.missing).toContain("Coconut water");
+    expect(list.missing).not.toContain("Water");
+    expect(list.missing).not.toContain("Ice cubes");
+  });
 });

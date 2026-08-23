@@ -31,6 +31,7 @@ import { useSubscriber } from "./context/SubscriberContext";
 import { subscribeEntitlement } from "./utilities/cloudSync";
 import { LanguageProvider } from "./context/LanguageContext";
 import { clearKernelSession } from "./utilities/kernelSessionStorage";
+import MealPlansErrorBoundary from "./components/MealPlansErrorBoundary";
 
 const SmoothieLab = lazy(() => import("./pages/SmoothieLab"));
 const Frequencies = lazy(() => import("./pages/Frequencies"));
@@ -94,6 +95,8 @@ function EntitlementBridge() {
 function Shell() {
   const location = useLocation();
   const { user } = useAuth();
+  const partnerInvitation = new URLSearchParams(location.search).get("invite");
+  const isKoyaInvitation = partnerInvitation === "koya-webb";
   const accountKey = user?.uid || "guest";
   const activeKernel = useMemo(
     () => RESUMABLE_KERNELS.find((kernel) => kernel.matches(location.pathname)) || null,
@@ -173,6 +176,10 @@ function Shell() {
 
   return (
     <div className={shellBgClass}>
+      {isKoyaInvitation && <aside className="mx-auto flex max-w-6xl items-center justify-between gap-4 border-b border-emerald-300/30 bg-emerald-950/90 px-5 py-3 text-emerald-50 shadow-lg shadow-emerald-950/30">
+        <span><strong className="text-emerald-200">Private beta invitation for Koya Webb.</strong> Welcome to Nature&apos;s Elixirz OS - explore the experience at your own pace.</span>
+        <Link className="shrink-0 rounded-full border border-emerald-300/50 px-3 py-1.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-300 hover:text-emerald-950" to="/astra?invite=koya-webb&source=partner-media-kit">Begin with Astra</Link>
+      </aside>}
       {/* PAGE CONTENT ONLY — headers are embedded per page */}
       <div className="pt-0 pb-20 md:pb-10">
         <Suspense fallback={<PageLoader />}>
@@ -184,10 +191,13 @@ function Shell() {
               <section
                 key={`${accountKey}:${kernel.id}:${cloudHydrationRevision}:${kernelRevisions[kernel.id] || 0}`}
                 hidden={!isActive}
-                aria-hidden={!isActive}
                 className="kernel-workspace"
               >
-                <KernelComponent />
+                {kernel.id === "meals" ? (
+                  <MealPlansErrorBoundary>
+                    <KernelComponent />
+                  </MealPlansErrorBoundary>
+                ) : <KernelComponent />}
               </section>
             );
           })}

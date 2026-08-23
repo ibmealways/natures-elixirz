@@ -19,6 +19,8 @@ import { formatQuantityText, getMeasurementSystem, saveMeasurementSystem } from 
 import { getAstraKernelTransfer } from "../utilities/astraKernelTransfer";
 import { getKernelSession, saveKernelSession } from "../utilities/kernelSessionStorage";
 import { assessClientNutritionRisk } from "../utilities/nutritionRiskScreen";
+import { isHouseholdStapleIngredient, providerSearchUrl } from "../utilities/shoppingIntelligence";
+import { dailyAllowanceComparison, mergeValidatedMealPlanSection, normalizeDailyNutrition, normalizeGroceryList, normalizeRestoredMealPlan, replacementForMealPlanSection, requestMealPlanSectionWithRetry } from "../utilities/mealPlanViewModel";
 import "../styles/CosmicShell.css";
 import "../styles/wellnessOS.css";
 import "../styles/mealPlanStudio.css";
@@ -59,6 +61,18 @@ const mealCollageImages = [
   "/assets/astra-gallery/dinner-salmon.png",
 ];
 
+function validateGeneratedPlanContract(plan, requestedDays) {
+  if (!Array.isArray(plan) || plan.length !== requestedDays) {
+    throw new Error(`Astra returned ${Array.isArray(plan) ? plan.length : 0} of ${requestedDays} requested days.`);
+  }
+  plan.forEach((day, index) => {
+    if (Number(day?.day) !== index + 1 || !Array.isArray(day?.meals) || day.meals.length !== 5) {
+      throw new Error(`Day ${index + 1} did not satisfy the complete five-meal response contract.`);
+    }
+  });
+  return plan;
+}
+
 export default function MealPlanLab() {
   const [params] = useSearchParams();
   const handoffSource = params.get("source") || "";
@@ -90,6 +104,7 @@ export default function MealPlanLab() {
   const [mealInventory, setMealInventory] = useState(() => getMealKitchenInventory(storageScope));
   const [measurementSystem, setMeasurementSystem] = useState(getMeasurementSystem);
   const [openInstructions, setOpenInstructions] = useState({});
+  const [openIngredientSwap, setOpenIngredientSwap] = useState("");
   const [openKitchenZones, setOpenKitchenZones] = useState({ pantry: false, fridge: false, freezer: false });
   useEffect(() => {
     const refreshInventory = (event) => {
@@ -107,23 +122,30 @@ export default function MealPlanLab() {
   const rememberedGoal = generationContext.kernelMemory?.goals?.at(-1);
   const [goal, setGoal] = useState(VALID_GOALS.includes(astraTransfer?.goal) ? astraTransfer.goal : VALID_GOALS.includes(requestedGoal) ? requestedGoal : restoredSession?.goal || rememberedGoal || getSuggestedGoal(storageScope) || profile.healthGoals?.[0] || "general");
   const [days, setDays] = useState(astraTransfer?.days || restoredSession?.days || 1);
+  const [generationMode, setGenerationMode] = useState(restoredSession?.generationMode || "kitchen");
   const [planningMonth, setPlanningMonth] = useState(restoredSession?.planningMonth || 1);
   const yearlyPlanning = profile.subscriptionBillingMode === "yearly";
-  const [generated, setGenerated] = useState(restoredSession?.generated || null);
+  const [generated, setGenerated] = useState(() => normalizeRestoredMealPlan(restoredSession?.generated));
   const [saved, setSaved] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
   const [collageDay, setCollageDay] = useState(0);
   const [mealVisuals, setMealVisuals] = useState({});
   const [visualStatus, setVisualStatus] = useState({});
   const [alternateIndex, setAlternateIndex] = useState(0);
-  const [generationStatus, setGenerationStatus] = useState(restoredSession?.generationStatus || "idle");
-  const [generationMessage, setGenerationMessage] = useState(restoredSession?.generationMessage || "");
+  const restoredGenerationStatus = restoredSession?.generationStatus === "loading" ? "idle" : (restoredSession?.generationStatus || "idle");
+  const [generationStatus, setGenerationStatus] = useState(restoredGenerationStatus);
+  const [generationMessage, setGenerationMessage] = useState(restoredSession?.generationStatus === "loading" ? "The prior request ended before completion. Your last accepted plan is still available; start a new generation when ready." : (restoredSession?.generationMessage || ""));
   const [medicationSafety, setMedicationSafety] = useState(restoredSession?.medicationSafety || null);
   const [nutritionIntelligence, setNutritionIntelligence] = useState(restoredSession?.nutritionIntelligence || null);
+  const dailyNutrition = normalizeDailyNutrition(nutritionIntelligence);
   const [stockedMessage, setStockedMessage] = useState("");
   const visualEpochRef = useRef(0);
   const planEpochRef = useRef(0);
+  const acceptedPlanRef = useRef(generated);
   const autoHandoffStartedRef = useRef("");
+  useEffect(() => {
+    if (generated?.length && generationStatus === "ready") acceptedPlanRef.current = generated;
+  }, [generated, generationStatus]);
   useEffect(() => {
     if (!nutritionRisk.generationLimited) return;
     setGenerated(null);
@@ -131,12 +153,18 @@ export default function MealPlanLab() {
     setGenerationMessage(nutritionRisk.message);
   }, [nutritionRisk.generationLimited, nutritionRisk.message]);
   useEffect(() => {
-    saveKernelSession(storageScope, "meals", { goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "", smoothieFingerprint });
-  }, [storageScope, goal, days, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieFingerprint]);
+    saveKernelSession(storageScope, "meals", { goal, days, generationMode, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieRecipeName: smoothieContext?.recipeName || "", smoothieFingerprint });
+  }, [storageScope, goal, days, generationMode, planningMonth, generated, generationStatus, generationMessage, medicationSafety, nutritionIntelligence, smoothieFingerprint]);
   const sample = useMemo(() => generateMealPlan(profile, goal, days, { kitchenItems: generationContext.kitchenItems, smoothieContext: handoffSource === "smoothie" ? smoothieContext : null }), [profile, goal, days, generationContext.kitchenItems, handoffSource, smoothieContext?.recipeName]);
-  const generationHasNoDisplayablePlan = ["loading", "failed", "blocked"].includes(generationStatus);
-  const plan = generationHasNoDisplayablePlan ? [] : (generated || sample);
-  const groceries = buildGroceryList(plan, generationContext.kitchenItems);
+  const generationHasNoDisplayablePlan = ["loading", "failed", "blocked"].includes(generationStatus) && !generated;
+  const plan = generated || (generationHasNoDisplayablePlan ? [] : sample);
+  const groceries = normalizeGroceryList(generated && generationStatus !== "ready"
+    ? null
+    : buildGroceryList(plan, generationContext.kitchenItems));
+  const replacementOptions = useMemo(() => [...new Set([
+    ...(generationContext.kitchenItems || []).map((item) => typeof item === "string" ? item : item?.name),
+    ...(generated || []).flatMap((day) => day?.meals || []).flatMap((meal) => meal?.ingredients || []).map((item) => item?.name),
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b)), [generationContext.kitchenItems, generated]);
   const selectedGoal = goals.find(([value]) => value === goal) || goals.find(([value]) => value === "general");
   const journey = getWellnessJourney(storageScope);
   const calendar = useMemo(() => {
@@ -180,11 +208,50 @@ export default function MealPlanLab() {
   }
 
   function stockPurchasedIngredient(item) {
-    const zone = storageZoneForIngredient(item);
-    const next = saveMealKitchenInventory({ ...mealInventory, [zone]: [...mealInventory[zone], item] }, storageScope);
-    setMealInventory(next);
-    setStockedMessage(`${item} was added to your ${zone}.`);
+    const confirmed = window.confirm(
+      `${item} is already on this plan's shopping list.\n\nSelect OK after purchasing it to add it to your kitchen. Select Cancel to leave it on the shopping list.`,
+    );
+    if (!confirmed) {
+      setStockedMessage(`${item} remains on your shopping list.`);
+      window.setTimeout(() => setStockedMessage(""), 3500);
+      return;
+    }
+
+    try {
+      const zone = storageZoneForIngredient(item);
+      const zoneItems = Array.isArray(mealInventory?.[zone]) ? mealInventory[zone] : [];
+      const itemKey = String(item || "").trim().toLowerCase();
+      const alreadyStocked = zoneItems.some(
+        (entry) => String(entry || "").trim().toLowerCase() === itemKey,
+      );
+
+      if (alreadyStocked) {
+        setStockedMessage(`${item} is already in your ${zone}.`);
+      } else {
+        const next = saveMealKitchenInventory(
+          { ...mealInventory, [zone]: [...zoneItems, item] },
+          storageScope,
+        );
+        setMealInventory(next);
+        setStockedMessage(`${item} was added to your ${zone}.`);
+      }
+    } catch (error) {
+      console.error("Unable to add meal-plan ingredient to kitchen", error);
+      setStockedMessage(`We couldn't update ${item}. Please retry.`);
+    }
     window.setTimeout(() => setStockedMessage(""), 3500);
+  }
+
+  async function requestIngredientReplacement(day, meal, ingredient, replacement) {
+    setOpenIngredientSwap("");
+    if (!replacement || replacement === ingredient.name) return;
+    await generate(Date.now() % 100000, goal, days, {
+      day: Number(day.day),
+      meal: meal.meal,
+      dish: meal.food,
+      ingredient: ingredient.name,
+      replacement,
+    });
   }
 
   async function generateVisuals(dayPlan, dayIndex) {
@@ -213,7 +280,7 @@ export default function MealPlanLab() {
     setVisualStatus({});
   }
 
-  async function generate(variationSeed = 0, requestedNutritionGoal = goal, requestedDays = days) {
+  async function generate(variationSeed = 0, requestedNutritionGoal = goal, requestedDays = days, requestedReplacement = null) {
     if (!unlocked || !isOnboarded) return;
     if (nutritionRisk.generationLimited) {
       setGenerated(null);
@@ -222,15 +289,17 @@ export default function MealPlanLab() {
       return;
     }
     const requestEpoch = planEpochRef.current + 1;
+    const preservedPlan = acceptedPlanRef.current || generated;
+    const assembledPlan = [];
     planEpochRef.current = requestEpoch;
     resetPlanVisuals();
     setGenerationStatus("loading");
     setNutritionIntelligence(null);
-    setGenerationMessage(`Astra is building a ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || "personalized"} plan from your synchronized profile and kitchen inventory.`);
+    setGenerationMessage(`Astra is building a ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || "personalized"} plan ${generationMode === "kitchen" ? "from your synchronized profile and kitchen inventory" : "from your synchronized profile with a complete shopping list"}.`);
     try {
-      if (!functions || requestedDays > 7) throw new Error(requestedDays > 7 ? "Thirty-day AI planning is not yet enabled." : "AI service is unavailable.");
-      const callable = httpsCallable(functions, "generateSmartMealPlan", { timeout: 285000 });
-      const result = await callable({
+      if (!functions) throw new Error("AI service is unavailable.");
+      const callable = httpsCallable(functions, "generateSmartMealPlan", { timeout: 540000 });
+      const baseRequest = {
         goal: requestedNutritionGoal,
         goalLabel: goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal,
         crossTierContext: {
@@ -248,20 +317,75 @@ export default function MealPlanLab() {
           } : null,
           frequencyIncludedBySubscriber: handoffSource === "frequency",
         },
-        days: requestedDays,
         variationSeed,
         planningMonth,
-        kitchenItems: generationContext.kitchenItems,
+        kitchenItems: generationMode === "kitchen" ? generationContext.kitchenItems : [],
+        generationMode,
         learning: generationContext.learningProfile,
         astraRequest: astraTransfer ? { title: astraTransfer.title, ingredients: astraTransfer.ingredients, notes: astraTransfer.notes } : null,
-      });
+        requestedReplacement,
+      };
+      const intelligenceSections = [];
+      let latestMedicationSafety = null;
+      let sectionStart = 1;
+      while (sectionStart <= requestedDays) {
+        const sectionDays = Math.min(3, requestedDays - sectionStart + 1);
+        setGenerationMessage(`Astra is validating days ${sectionStart}-${sectionStart + sectionDays - 1} of ${requestedDays}. ${assembledPlan.length} validated day${assembledPlan.length === 1 ? " is" : "s are"} preserved.`);
+        const currentSectionStart = sectionStart;
+        const result = await requestMealPlanSectionWithRetry((sectionAttempt) => callable({
+          ...baseRequest,
+          variationSeed: variationSeed + sectionAttempt - 1,
+          days: sectionDays,
+          crossTierContext: {
+            ...baseRequest.crossTierContext,
+            smoothie: currentSectionStart === 1 ? baseRequest.crossTierContext.smoothie : null,
+          },
+          continuation: {
+            startDay: currentSectionStart,
+            totalDays: requestedDays,
+            lockedMeals: assembledPlan.flatMap((day) => day.meals.map((meal) => `${meal.meal}: ${meal.food}`)),
+          },
+          requestedReplacement: replacementForMealPlanSection(requestedReplacement, currentSectionStart, sectionDays),
+        }), {
+          maximumAttempts: 3,
+          onRetry: (_error, attempt, maximumAttempts) => {
+            setGenerationStatus(assembledPlan.length ? "partial" : "loading");
+            setGenerationMessage(`Days ${currentSectionStart}-${currentSectionStart + sectionDays - 1} need another targeted pass (${attempt + 1} of ${maximumAttempts}). ${assembledPlan.length} validated day${assembledPlan.length === 1 ? " remains" : "s remain"} preserved.`);
+          },
+        });
+        if (requestEpoch !== planEpochRef.current) return;
+        const mergedPlan = mergeValidatedMealPlanSection(assembledPlan, result.data?.plan, sectionStart, sectionDays);
+        const section = mergedPlan.slice(assembledPlan.length);
+        assembledPlan.push(...section);
+        setGenerated([...assembledPlan]);
+        setGenerationStatus(assembledPlan.length < requestedDays ? "partial" : "loading");
+        setGenerationMessage(`Validated and preserved ${assembledPlan.length} of ${requestedDays} requested days.`);
+        if (result.data?.nutritionIntelligence) intelligenceSections.push(result.data.nutritionIntelligence);
+        latestMedicationSafety = result.data?.medicationSafety || latestMedicationSafety;
+        sectionStart += section.length;
+      }
       if (requestEpoch !== planEpochRef.current) return;
-      const nextPlan = result.data.plan;
-      setNutritionIntelligence(result.data.nutritionIntelligence || null);
-      setMedicationSafety(result.data.medicationSafety || null);
+      const nextPlan = validateGeneratedPlanContract(assembledPlan, requestedDays);
+      const nutritionSections = intelligenceSections.map((item) => item?.dailyNutrition).filter(Boolean);
+      const combinedNutritionIntelligence = intelligenceSections.length ? {
+        ...intelligenceSections[0],
+        averageGoalFit: Math.round(intelligenceSections.reduce((sum, item) => sum + (Number(item.averageGoalFit) || 0) * (Number(item.mealsReviewed) || 0), 0) / Math.max(1, intelligenceSections.reduce((sum, item) => sum + (Number(item.mealsReviewed) || 0), 0))),
+        mealsReviewed: intelligenceSections.reduce((sum, item) => sum + (Number(item.mealsReviewed) || 0), 0),
+        professionalReviewRequired: intelligenceSections.some((item) => item.professionalReviewRequired),
+        warnings: [...new Set(intelligenceSections.flatMap((item) => item.warnings || []))],
+        dailyNutrition: nutritionSections.length ? {
+          ...nutritionSections[0],
+          days: nutritionSections.flatMap((item, sectionIndex) => (item.days || []).map((day) => ({ ...day, day: sectionIndex * 3 + Number(day.day || 1) }))),
+        } : null,
+      } : null;
+      setGenerationStatus("saving");
+      setGenerationMessage("Astra validated every requested day. Saving the accepted plan to this Kernel and your cross-device session.");
+      setNutritionIntelligence(combinedNutritionIntelligence);
+      setMedicationSafety(latestMedicationSafety);
       setGenerationStatus("ready");
       setGenerationMessage(`Validated AI plan created specifically for ${goals.find(([value]) => value === requestedNutritionGoal)?.[1] || requestedNutritionGoal}.`);
       setGenerated(nextPlan);
+      acceptedPlanRef.current = nextPlan;
       recordMealJourney(requestedNutritionGoal, requestedDays, nextPlan, storageScope);
       publishWellnessSignal(storageScope, "meals", { goal: requestedNutritionGoal, duration: requestedDays, selection: `${requestedDays}-day nourishment plan` });
       setSaved(false);
@@ -272,18 +396,19 @@ export default function MealPlanLab() {
       if (requestEpoch !== planEpochRef.current) return;
       console.error("AI meal-plan generation failed", error);
       if (String(error?.code || "").includes("failed-precondition")) {
-        setGenerated(null);
+        setGenerated(preservedPlan || null);
         setGenerationStatus("blocked");
         setGenerationMessage(error?.message || "Generation is paused until clinician-established nutrition targets are saved.");
         return;
       }
-      setGenerated(null);
-      setMedicationSafety(null);
-      setNutritionIntelligence(null);
       setGenerationStatus("failed");
-      setGenerationMessage(requestedDays > 7
-        ? "Thirty-day AI planning is not available yet. No substitute or template plan was created. Choose 1, 3, or 7 days and try again."
-        : "Astra could not produce a plan that passed every safety, quantity, and culinary check. No substitute or template plan was created. Please retry; recent validation findings will guide the next attempt.");
+      const recoverablePlan = assembledPlan.length ? assembledPlan : preservedPlan;
+      setGenerated(recoverablePlan || null);
+      setGenerationMessage(assembledPlan.length
+        ? `Astra preserved ${assembledPlan.length} validated day${assembledPlan.length === 1 ? "" : "s"} from this request. Retry to continue the unfinished ${requestedDays}-day plan; no fallback meals were inserted.`
+        : preservedPlan
+        ? `The requested ${requestedDays}-day plan did not pass every safety, quantity, and culinary check. Your previously accepted ${preservedPlan.length}-day plan remains visible below; it is not a partial ${requestedDays}-day result.`
+        : "Astra could not produce a plan that passed every safety, quantity, and culinary check. No substitute or template plan was created. Please retry; targeted validation findings will guide the next attempt.");
       return;
     }
   }
@@ -340,31 +465,33 @@ export default function MealPlanLab() {
         ].map(([zone, label, Icon, placeholder]) => <article className={openKitchenZones[zone] ? "is-open" : "is-collapsed"} key={zone}><div className="meal-zone-heading"><Icon size={19} /><strong>{label}</strong><span className="meal-zone-count" aria-label={`${mealInventory[zone].length} items`}>{mealInventory[zone].length}</span><button type="button" aria-expanded={openKitchenZones[zone]} onClick={() => setOpenKitchenZones((current) => ({ ...current, [zone]: !current[zone] }))}>{openKitchenZones[zone] ? "Hide items" : "View items"}</button></div>{openKitchenZones[zone] && <div className="meal-zone-content"><div className="meal-zone-items">{mealInventory[zone].map((item) => <span key={item}>{item}<button onClick={() => removeInventoryItem(zone, item)} aria-label={`Remove ${item}`}><X size={12} /></button></span>)}</div><div className="meal-zone-add"><input value={inventoryDrafts[zone]} placeholder={placeholder} onChange={(event) => setInventoryDrafts((current) => ({ ...current, [zone]: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") addInventoryItem(zone); }} /><button onClick={() => addInventoryItem(zone)}><Plus size={15} /> Add</button></div></div>}</article>)}</div>
         <p className="smoothie-import-note"><GlassWater size={15} /> Smoothie pantry imported: {[...smoothieInventory.pantry, ...smoothieInventory.fridge, ...smoothieInventory.freezer].length || 0} ingredients.</p>
       </section>
-      <NutritionFactsRegistry scope={storageScope} pantryItems={mealKitchenItems} activeIngredients={generated?.flatMap((day) => day.meals?.flatMap((meal) => meal.ingredients || []) || []) || []} activeFormulaName={generated ? `${days}-day meal plan` : ""} />
-      <div className="ne-alert"><strong>Pre-generation inventory review:</strong> {isOnboarded ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total items from Pantry, Fridge, Freezer, and Smoothie pantry will be reviewed.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
+      <NutritionFactsRegistry scope={storageScope} pantryItems={mealKitchenItems} activeIngredients={generated?.flatMap((day) => day.meals?.flatMap((meal) => meal.ingredients || []) || []) || []} activeFormulaName={generated ? `${generated.length}-day accepted meal plan` : ""} />
+      <fieldset className="meal-generation-modes"><legend>Choose how Astra plans</legend><button type="button" className={generationMode === "kitchen" ? "active" : ""} aria-pressed={generationMode === "kitchen"} onClick={() => { setGenerationMode("kitchen"); setGenerated(null); }}>Generate From My Kitchen<small>Prioritize foods already in your household inventory.</small></button><button type="button" className={generationMode === "automatic" ? "active" : ""} aria-pressed={generationMode === "automatic"} onClick={() => { setGenerationMode("automatic"); setGenerated(null); }}>Generate Automatically<small>Create coherent dishes first and identify what you need to purchase.</small></button></fieldset>
+      <div className="ne-alert"><strong>Pre-generation review:</strong> {isOnboarded ? generationMode === "kitchen" ? `${generationContext.reviewedProfileFields.length} profile areas and ${generationContext.kitchenItems.length} total kitchen items will be reviewed.` : `${generationContext.reviewedProfileFields.length} profile areas will be reviewed; needed foods will be placed on the shopping list.` : "Complete your personal profile before Astra can generate your meal plan."}</div>
       {nutritionRisk.flags.length > 0 && <div className="ne-alert ne-alert-danger"><strong>{nutritionRisk.generationLimited ? "Clinician-target safety gate" : "Additional nutrition review"}:</strong> {nutritionRisk.message} {nutritionRisk.generationLimited ? "Generation remains blocked until the required clinician-established targets are saved." : "Saved restrictions remain mandatory; confirm individual targets with the appropriate clinician or pharmacist."}</div>}
-      <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={() => generate(0)}>{generationStatus === "loading" ? <><Sparkles size={18} /> Astra is cultivating your plan…</> : !unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> Review profile + all inventory and cultivate</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
-      {generationMessage && <div className={`ne-alert ${["failed", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : generationStatus === "failed" ? "Plan not generated" : "Meal Plan status"}:</strong> {generationMessage}</div>}
+      <div className="generation-actions"><button className="ne-primary grow-plan" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={() => generate(0)}>{generationStatus === "loading" ? <><Sparkles size={18} /> Astra is cultivating your plan…</> : !unlocked ? <><LockKeyhole size={17} /> Subscribe to cultivate multi-day plans</> : !isOnboarded ? <><LockKeyhole size={17} /> Complete profile to cultivate</> : <><Sparkles size={18} /> {generationMode === "kitchen" ? "Review profile + kitchen and cultivate" : "Review profile and cultivate"}</>}</button><button className="ne-secondary alternate-formula" disabled={!unlocked || !isOnboarded || generationStatus === "loading"} onClick={generateAlternate}><Sparkles size={18} /> Alternate ingredients</button><small>Active beta testers have no daily meal-plan generation cap during testing.</small></div>
+      {generationMessage && <div className={`ne-alert ${["failed", "blocked"].includes(generationStatus) ? "ne-alert-danger" : ""}`}><strong>{generationStatus === "loading" ? "Meal intelligence working" : generationStatus === "saving" ? "Saving accepted plan" : generationStatus === "ready" ? "Validated AI meal plan" : generationStatus === "blocked" ? "Safety gate active" : generationStatus === "failed" ? "Plan not generated" : "Meal Plan status"}:</strong> {generationMessage}</div>}
       {medicationSafety && <div className={`ne-alert ${medicationSafety.reviewRequired ? "ne-alert-danger" : ""}`}><strong>Medication-aware review · {medicationSafety.status}:</strong> {medicationSafety.note}{medicationSafety.foodsAvoided?.length > 0 && <> Foods omitted during screening: {medicationSafety.foodsAvoided.join(", ")}.</>} This screening cannot replace the medication label, pharmacist, or prescriber.</div>}
     </section>
 
-    <section className="constellation-overview" id="meal-constellation">
+    <section className={`constellation-overview ${generationStatus === "loading" && !generated ? "generation-pending" : ""}`} id="meal-constellation">
+      {generationStatus === "loading" && !generated && <div className="generation-pending-copy"><p className="ne-kicker">Generation in progress</p><h2>{selectedGoal[1]} constellation</h2><p>Astra is preparing {days} requested day{days === 1 ? "" : "s"}; no plan has been accepted yet.</p></div>}
       <div><p className="ne-kicker">{generated ? "Personalized harvest" : "Interactive sample harvest"}</p><h2>{selectedGoal[1]} constellation</h2><p>{selectedGoal[2]} · {plan.length} day{plan.length > 1 ? "s" : ""} · {plan.length * 5} nourishment moments</p></div>
-      <div className="constellation-metric"><span>{plan.length * 5}</span><small>moments mapped</small></div>
+      <div className="constellation-metric">{generationStatus === "loading" && !generated ? <><Sparkles size={24} /><small>validation underway</small></> : <><span>{plan.length * 5}</span><small>moments mapped</small></>}</div>
     </section>
 
-    {nutritionIntelligence?.dailyNutrition && <section className="nutrient-future-vault" aria-labelledby="nutrient-future-title">
+    {dailyNutrition && <section className="nutrient-future-vault" aria-labelledby="nutrient-future-title">
       <div className="nutrient-vault-core"><Database size={31} /><span>Verified data lattice</span><i /><i /></div>
       <div className="nutrient-vault-copy"><p className="ne-kicker">Nutrition Intelligence · Evidence-aware database</p><h2 id="nutrient-future-title">Daily nutrient constellation</h2><p>Calculated subtotals are separated from data coverage. Missing brand or nutrient values remain unknown—they are never silently counted as zero.</p></div>
       <div className="nutrient-target-grid">
-        <article><small>Energy target</small><strong>{nutritionIntelligence.dailyNutrition.targets.energyKcal ? `~${nutritionIntelligence.dailyNutrition.targets.energyKcal} kcal` : "Clinician target needed"}</strong><span>{nutritionIntelligence.dailyNutrition.targets.status}</span></article>
-        <article><small>Protein planning range</small><strong>{nutritionIntelligence.dailyNutrition.targets.proteinG ? `${nutritionIntelligence.dailyNutrition.targets.proteinG.minimum}–${nutritionIntelligence.dailyNutrition.targets.proteinG.upperPlanningRange} g` : "Not calculated"}</strong><span>Age, weight, activity + risk screen</span></article>
-        <article><small>Multi-day adequacy</small><strong>{nutritionIntelligence.dailyNutrition.multiDayAdequacyStatus === "estimated-reference-comparison" ? "Reference comparison ready" : "Insufficient verified coverage"}</strong><span>{nutritionIntelligence.dailyNutrition.days.length} day{nutritionIntelligence.dailyNutrition.days.length === 1 ? "" : "s"} assessed</span></article>
+        <article><small>Energy target</small><strong>{dailyNutrition.targets.energyKcal ? `~${dailyNutrition.targets.energyKcal} kcal` : "Clinician target needed"}</strong><span>{dailyNutrition.targets.status || "insufficient-profile-data"}</span></article>
+        <article><small>Protein planning range</small><strong>{dailyNutrition.targets.proteinG ? `${dailyNutrition.targets.proteinG.minimum}–${dailyNutrition.targets.proteinG.upperPlanningRange} g` : "Not calculated"}</strong><span>Age, weight, activity + risk screen</span></article>
+        <article><small>Multi-day adequacy</small><strong>{dailyNutrition.multiDayAdequacyStatus === "estimated-reference-comparison" ? "Reference comparison ready" : "Insufficient verified coverage"}</strong><span>{dailyNutrition.days.length} day{dailyNutrition.days.length === 1 ? "" : "s"} assessed</span></article>
       </div>
-      <div className="nutrient-day-grid">{nutritionIntelligence.dailyNutrition.days.map((day) => <article key={day.day}><header><strong>Day {day.day}</strong><span>{day.adequacyStatus === "estimated-reference-comparison" ? "Coverage qualified" : "Partial data"}</span></header><div>{[
+      <div className="nutrient-day-grid">{dailyNutrition.days.map((day) => <article key={day.day}><header><strong>Day {day.day}</strong><span>{day.adequacyStatus === "estimated-reference-comparison" ? "Coverage qualified" : "Partial data"}</span></header><div className="nutrient-total-grid">{[
         ["Calories", day.totals.energyKcal, "kcal", day.nutrientCoveragePercent.energyKcal], ["Protein", day.totals.proteinG, "g", day.nutrientCoveragePercent.proteinG], ["Carbs", day.totals.carbohydrateG, "g", day.nutrientCoveragePercent.carbohydrateG], ["Fat", day.totals.fatG, "g", day.nutrientCoveragePercent.fatG], ["Sodium", day.totals.sodiumMg, "mg", day.nutrientCoveragePercent.sodiumMg], ["Potassium", day.totals.potassiumMg, "mg", day.nutrientCoveragePercent.potassiumMg], ["Phosphorus", day.totals.phosphorusMg, "mg", day.nutrientCoveragePercent.phosphorusMg], ["Calcium", day.totals.calciumMg, "mg", day.nutrientCoveragePercent.calciumMg], ["Iron", day.totals.ironMg, "mg", day.nutrientCoveragePercent.ironMg], ["Vitamin K", day.totals.vitaminKMcg, "mcg", day.nutrientCoveragePercent.vitaminKMcg], ["Added sugar", day.totals.addedSugarG, "g", day.nutrientCoveragePercent.addedSugarG], ["Saturated fat", day.totals.saturatedFatG, "g", day.nutrientCoveragePercent.saturatedFatG],
-      ].map(([label, value, unit, coverage]) => <span key={label}><small>{label}</small><b>{coverage > 0 ? `${value} ${unit}` : "Unknown"}</b><em>{coverage}% covered</em></span>)}</div></article>)}</div>
-      <footer><ShieldCheck size={17} /><span>{nutritionIntelligence.dailyNutrition.catalogBoundary} {nutritionIntelligence.dailyNutrition.brandedFoodBoundary}</span></footer>
+      ].map(([label, value, unit, coverage]) => <span key={label}><small>{label}</small><b>{coverage > 0 ? `${value} ${unit}` : "Unknown"}</b><em>{coverage}% covered</em></span>)}</div><section className="daily-allowance-summary" aria-label={`Day ${day.day} daily allowance comparison`}><h3>Daily recommended allowance</h3><p>Estimated from verified ingredients only. “Remaining” is not reliable until coverage is substantially complete.</p><div>{dailyAllowanceComparison(day, dailyNutrition.targets).map((item) => <article className={item.kind === "upper" ? "is-limit" : ""} key={item.key}><small>{item.label}</small><strong>{item.total == null ? "Unknown" : `${item.total} ${item.unit}`} <em>of {item.target} {item.unit}</em></strong><span>{item.status}</span><i>{item.coverage}% coverage</i></article>)}</div></section></article>)}</div>
+      <footer><ShieldCheck size={17} /><span>{dailyNutrition.catalogBoundary} {dailyNutrition.brandedFoodBoundary}</span></footer>
     </section>}
 
     <div className="meal-days">{plan.map((day) => <section className="day-orbit" key={day.day}>
@@ -372,12 +499,12 @@ export default function MealPlanLab() {
       <div className="day-content"><p className="ne-kicker">{generated ? "Personalized plan" : "Sample preview"} · Day {day.day}</p><div className="meal-timeline">{day.meals.map((item, index) => {
         const MomentIcon = mealMoments[index].icon;
         const instructionKey = `${day.day}-${item.meal}`;
-        return <article className={`moment-${index + 1}`} key={item.meal}><div className="meal-moment"><MomentIcon size={17} /><span>{mealMoments[index].name}</span></div><small>{item.meal}</small><h2>{item.food}</h2><div className="meal-detail"><strong>Ingredients + quantity</strong><ul>{item.ingredients?.map((ingredient) => { const isOnHand = ingredient.availability === "on-hand" || groceries.available.some((available) => available.toLowerCase() === ingredient.name.toLowerCase()); return <li key={`${ingredient.quantity}-${ingredient.name}`}><b>{formatQuantityText(ingredient.quantity, measurementSystem)}</b> {ingredient.name}{ingredient.availability && (isOnHand ? <em className="ingredient-availability on-hand">On hand</em> : <button type="button" className="ingredient-availability needed ingredient-needed-action" onClick={() => stockPurchasedIngredient(ingredient.name)} title={`Add ${ingredient.name} to your kitchen`}>Needed · Add</button>)}</li>; })}</ul>{item.rationale && <p className="pantry-driven-note"><strong>Why it fits:</strong> {item.rationale}</p>}{item.pantryDriven && <p className="pantry-driven-note">Built with matching foods from your saved inventory; select any Needed badge after purchasing the item to add it to your kitchen.</p>}{item.seasoningRecommendation && <div className="seasoning-recommendation"><strong>Profile-aware seasoning</strong><span>{item.seasoningRecommendation.rationale}</span><small>{item.seasoningRecommendation.safetyNote}</small></div>}{item.requiresCooking && (unlocked ? <><button className="cooking-instructions-link" type="button" aria-expanded={Boolean(openInstructions[instructionKey])} onClick={() => setOpenInstructions((current) => ({ ...current, [instructionKey]: !current[instructionKey] }))}>{openInstructions[instructionKey] ? "Hide cooking instructions" : "View cooking instructions"}</button>{openInstructions[instructionKey] && <div className="cooking-instructions"><strong>Cooking instructions</strong><ol>{item.instructions?.map((instruction) => <li key={instruction}>{instruction}</li>)}</ol></div>}</> : <Link className="cooking-instructions-link" to="/premium">Subscribe for cooking instructions</Link>)}</div><i className="timeline-star" /></article>;
+        return <article className={`moment-${index + 1}`} key={item.meal}><div className="meal-moment"><MomentIcon size={17} /><span>{mealMoments[index].name}</span></div><small>{item.meal}</small><h2>{item.food}</h2><div className="meal-detail"><strong>Ingredients + quantity</strong><ul>{item.ingredients?.map((ingredient, ingredientIndex) => { const isStaple = ingredient.availability === "household-staple" || isHouseholdStapleIngredient(ingredient.name); const isOnHand = ingredient.availability === "on-hand" || groceries.available.some((available) => available.toLowerCase() === ingredient.name.toLowerCase()); const swapKey = `${day.day}-${index}-${ingredientIndex}`; return <li className="meal-ingredient-row" key={`${ingredient.quantity}-${ingredient.name}`}><span><b>{formatQuantityText(ingredient.quantity, measurementSystem)}</b> {ingredient.name}{ingredient.availability && (isStaple ? <em className="ingredient-availability household-staple">Household staple</em> : isOnHand ? <em className="ingredient-availability on-hand">On hand</em> : <button type="button" className="ingredient-availability needed ingredient-needed-action" onClick={() => stockPurchasedIngredient(ingredient.name)} title={`Add ${ingredient.name} to your kitchen`}>Needed · Add</button>)}</span><button type="button" className="ingredient-swap-trigger" aria-expanded={openIngredientSwap === swapKey} onClick={() => setOpenIngredientSwap((current) => current === swapKey ? "" : swapKey)}>Swap</button>{openIngredientSwap === swapKey && <label className="ingredient-swap-picker"><span>Replace {ingredient.name} with</span><select defaultValue="" onChange={(event) => requestIngredientReplacement(day, item, ingredient, event.target.value)}><option value="" disabled>Choose an alternate</option>{replacementOptions.filter((option) => option.toLowerCase() !== ingredient.name.toLowerCase()).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>}</li>; })}</ul>{item.rationale && <p className="pantry-driven-note"><strong>Why it fits:</strong> {item.rationale}</p>}{item.pantryDriven && <p className="pantry-driven-note">Built with matching foods from your saved inventory; select any Needed badge after purchasing the item to add it to your kitchen.</p>}{item.seasoningRecommendation && <div className="seasoning-recommendation"><strong>Profile-aware seasoning</strong><span>{item.seasoningRecommendation.rationale}</span><small>{item.seasoningRecommendation.safetyNote}</small></div>}{item.requiresCooking && (unlocked ? <><button className="cooking-instructions-link" type="button" aria-expanded={Boolean(openInstructions[instructionKey])} onClick={() => setOpenInstructions((current) => ({ ...current, [instructionKey]: !current[instructionKey] }))}>{openInstructions[instructionKey] ? "Hide cooking instructions" : "View cooking instructions"}</button>{openInstructions[instructionKey] && <div className="cooking-instructions"><strong>Cooking instructions</strong><ol>{item.instructions?.map((instruction) => <li key={instruction}>{instruction}</li>)}</ol></div>}</> : <Link className="cooking-instructions-link" to="/premium">Subscribe for cooking instructions</Link>)}</div><i className="timeline-star" /></article>;
       })}</div></div>
     </section>)}</div>
 
     <section className="harvest-grid">
-      <article className="harvest-vault"><div className="harvest-heading"><ShoppingBasket size={25} /><div><p className="ne-kicker">Pantry-aware harvest list</p><h2>Still needed</h2></div></div><p>Astra compared every Smoothie and Meal recipe ingredient with your Pantry, Fridge, Freezer, and imported Smoothie pantry. After purchasing an item, select it below to add it to your kitchen automatically.</p>{stockedMessage && <p className="harvest-stocked-message" role="status">{stockedMessage}</p>}{groceries.missing.length ? <ul className="interactive-harvest-list">{groceries.missing.map((item, index) => { const destination = storageZoneForIngredient(item); return <li key={item}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item}</strong><button type="button" onClick={() => stockPurchasedIngredient(item)} aria-label={`Add ${item} to ${destination}`}><Plus size={14} /> Add to {destination}</button></li>; })}</ul> : <p className="harvest-complete">Your kitchen already covers every recognized ingredient in this plan.</p>}{groceries.available.length > 0 && <details className="available-harvest"><summary>{groceries.available.length} planned ingredients already available</summary><ul>{groceries.available.map((item) => <li key={item}>{item}</li>)}</ul></details>}</article>
+      <article className="harvest-vault"><div className="harvest-heading"><ShoppingBasket size={25} /><div><p className="ne-kicker">Pantry-aware harvest list</p><h2>Need to purchase</h2></div></div><p>Astra consolidates compatible quantities and compares them with your synchronized kitchen. Retailer links open searches only; they do not create a cart or place an order.</p>{stockedMessage && <p className="harvest-stocked-message" role="status">{stockedMessage}</p>}{groceries.missingDetails.length ? <><ul className="interactive-harvest-list">{groceries.missingDetails.map((item, index) => { const destination = storageZoneForIngredient(item.name); return <li key={`${item.name}-${item.quantity}`}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.quantity} {item.name}</strong><button type="button" onClick={() => stockPurchasedIngredient(item.name)} aria-label={`Add ${item.name} to ${destination}`}><Plus size={14} /> Add to {destination}</button></li>; })}</ul><div className="retailer-search-links"><span>Search this list:</span>{[["Instacart", "instacart"], ["Walmart", "walmart"], ["Amazon", "amazon"]].map(([label, provider]) => <a key={provider} href={providerSearchUrl(provider, groceries.missingDetails)} target="_blank" rel="noreferrer">{label}</a>)}</div></> : <p className="harvest-complete">Your kitchen already covers every recognized ingredient in this plan.</p>}{groceries.stapleDetails?.length > 0 && <details className="available-harvest"><summary>{groceries.stapleDetails.length} household staples excluded from shopping</summary><ul>{groceries.stapleDetails.map((item) => <li key={`${item.name}-${item.quantity}`}>{item.quantity} {item.name}</li>)}</ul></details>}{groceries.availableDetails.length > 0 && <details className="available-harvest"><summary>{groceries.availableDetails.length} consolidated ingredients already in kitchen</summary><ul>{groceries.availableDetails.map((item) => <li key={`${item.name}-${item.quantity}`}>{item.quantity} {item.name}</li>)}</ul></details>}</article>
       <article className="planned-menu"><div className="harvest-heading"><UtensilsCrossed size={25} /><div><p className="ne-kicker">Constellation index</p><h2>Meals in this plan</h2></div></div><div>{groceries.plannedMeals.map((item) => <span key={item}>{item}</span>)}</div></article>
       <section className="nourishment-calendar" aria-labelledby="nourishment-calendar-title">
         <div className="calendar-heading"><div><p className="ne-kicker"><CalendarDays size={14} /> Connected nourishment calendar</p><h2 id="nourishment-calendar-title">{calendar.label}</h2></div><p>Generated plans appear on their scheduled day. Today also shows your latest saved frequency pairing.</p></div>

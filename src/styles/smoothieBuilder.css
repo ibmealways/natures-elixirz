@@ -296,3 +296,46 @@
   .realm-disclosure-body { padding: 0 1rem 1rem; }
 }
 @media (prefers-reduced-motion: reduce) { .pantry-workspace { animation: none; } }
+
+/* Generated-result workspace: let long recipe intelligence use the available
+   contract width instead of stretching a permanent narrow sidebar. */
+.smoothie-lab-page {
+  padding-bottom: clamp(8rem, 12vw, 11rem);
+}
+
+.smoothie-lab-page .ne-recipe-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.smoothie-lab-page .recipe-sidecar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+  min-width: 0;
+  align-items: start;
+}
+
+.smoothie-lab-page .recipe-sidecar > * {
+  min-width: 0;
+  align-self: start;
+}
+
+/* Ingredient intelligence and the final power-up panel contain variable-length
+   content. Giving them the full row prevents a tall right rail and dead space. */
+.smoothie-lab-page .recipe-sidecar > details,
+.smoothie-lab-page .recipe-sidecar > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 800px) {
+  .smoothie-lab-page .recipe-sidecar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .smoothie-lab-page .recipe-sidecar > details,
+  .smoothie-lab-page .recipe-sidecar > :last-child {
+    grid-column: auto;
+  }
+}

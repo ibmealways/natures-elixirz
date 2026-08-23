@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 
 export const languages = [
   ["en", "English"], ["es", "Español"], ["fr", "Français"], ["pt", "Português"],
+  ["bhb", "Bhili · भीली · ભીલી"],
+  ["bhb", "Bhili · भीली · ભીલી"],
   ["de", "Deutsch"], ["zh", "中文"], ["ar", "العربية"], ["hi", "हिन्दी"],
 ];
 

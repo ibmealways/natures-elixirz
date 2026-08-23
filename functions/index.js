@@ -11,10 +11,10 @@ import * as functionsV1 from "firebase-functions/v1";
 import { createHash, randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import Stripe from "stripe";
-import { billingModeFromPrice, hasActiveBetaTestingAccess, hasKernelAccess, priceKey, sanitizeKernelIds, tierFromPrice, validateKernelSelection, validatePlanningSelection } from "./subscription.js";
+import { billingModeFromPrice, canonicalPlanForCheckout, foundingReservationDecision, hasActiveBetaTestingAccess, hasKernelAccess, priceKey, sanitizeKernelIds, tierFromPrice, validateKernelSelection, validatePlanningSelection } from "./subscription.js";
 import { aggregateReachRecords } from "./reach.js";
 import { buildSmoothieAiContext, buildSmoothieInstructions, smoothieRecipeSchema, validateSmoothieProposal } from "./smoothie-ai.js";
-import { buildMealPlanContext, buildMealPlanInstructions, mealPlanSchema, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
+import { buildMealPlanContext, buildMealPlanInstructions, buildTargetedMealRepairInput, describeMealPlanValidationFailure, identifyMealRepairTargets, mealPlanGenerationChunks, mealPlanSchema, mealPlanSchemaForDays, mealRepairSchema, mergeTargetedMealRepairs, summarizeMealPlanIntelligence, validateMealPlanProposal } from "./meal-plan-ai.js";
 import { assessHighRiskNutritionProfile } from "./nutrition-foundation.js";
 import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments } from "./data-lifecycle.js";
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
@@ -868,7 +868,7 @@ export const generateSmartSmoothie = onCall({ secrets: [openaiSecret], timeoutSe
   throw new HttpsError("unavailable", "AI smoothie generation is temporarily unavailable.");
 });
 
-export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSeconds: 300, memory: "1GiB", invoker: "public", enforceAppCheck }, async (request) => {
+export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSeconds: 540, memory: "1GiB", invoker: "public", enforceAppCheck }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to generate a personalized meal plan.");
   if (!request.auth.token.email_verified) throw new HttpsError("failed-precondition", "Verify your email before generating a personalized meal plan.");
   const uid = request.auth.uid;
@@ -886,35 +886,207 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
   await consumeMealPlanGeneration(uid, entitlement);
   const client = new OpenAI({ apiKey: openaiSecret.value() });
   const recentFailureSnapshot = await db.collection(`users/${uid}/mealPlanAiFailures`).orderBy("createdAt", "desc").limit(3).get();
-  const recentFailures = recentFailureSnapshot.docs.flatMap((document) => document.data().validationFailures || []).slice(0, 6);
+  const recentFailures = recentFailureSnapshot.docs.flatMap((document) => document.data().validationFailures || []).slice(0, 6)
+    .map((finding) => typeof finding === "string" ? finding : finding?.rule).filter(Boolean);
   let feedback = recentFailures.length
     ? `Generate the requested meal plan now. Learn from these recent validator findings and do not repeat them: ${recentFailures.join(" | ")}`
     : "Generate the requested meal plan now.";
   const validationFailures = [];
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const validationDiagnostics = [];
+  const repairHistory = [];
+  let workingProposal = null;
+  let generationModel = openaiModel.value();
+  const finalizePlan = async (candidateProposal, attempt) => {
+    const plan = validateMealPlanProposal(candidateProposal, context);
+    await db.collection(`users/${uid}/mealPlanAiHistory`).add({ goal: context.goal, days: context.days, summary: String(candidateProposal.summary || "").slice(0, 500), createdAt: FieldValue.serverTimestamp() });
+    logger.info("ai.meal_plan.generated", { uid, goal: context.goal, days: context.days, attempt, targetedRepairs: repairHistory.length });
+    await recordGenerationOutcome("smartMealPlan", "generated");
+    return { plan, nutritionIntelligence: summarizeMealPlanIntelligence(plan, context), medicationSafety: candidateProposal.medicationSafety, source: "openai", model: generationModel, repairHistory };
+  };
+
+  if (context.days > 1) {
+    const chunks = mealPlanGenerationChunks(context.days, 3);
+    const assembled = { days: [], summary: "", medicationSafety: null };
     try {
+      for (const chunk of chunks) {
+        const chunkContext = {
+          ...context,
+          days: chunk.days,
+          smoothieContext: chunk.startDay === 1 ? context.smoothieContext : null,
+        };
+        const lockedFormats = assembled.days.flatMap((day) => day.meals.map((meal) => `${meal.meal}: ${meal.food}`));
+        const response = await client.responses.create({
+          model: openaiModel.value(),
+          instructions: buildMealPlanInstructions(chunkContext),
+          input: `${feedback}\nThis is calendar day ${(context.continuation?.startDay || 1) + chunk.startDay - 1} through ${(context.continuation?.startDay || 1) + chunk.startDay + chunk.days - 2} of a ${context.continuation?.totalDays || context.days}-day plan. Never repeat these exact locked dishes. Avoid recently used formats, and do not disguise repetition with cosmetic renaming: ${JSON.stringify([...(context.continuation?.lockedMeals || []), ...lockedFormats])}.`,
+          reasoning: { effort: "low" },
+          text: { verbosity: "medium", format: { type: "json_schema", name: "personalized_meal_plan_chunk", strict: true, schema: mealPlanSchemaForDays(chunk.days) } },
+          safety_identifier: createHash("sha256").update(uid).digest("hex"),
+          max_output_tokens: 9000,
+        });
+        generationModel = response.model || generationModel;
+        const chunkProposal = JSON.parse(response.output_text);
+        assembled.summary = chunkProposal.summary || assembled.summary;
+        assembled.medicationSafety = chunkProposal.medicationSafety || assembled.medicationSafety;
+        const proposedDays = chunkProposal.days.map((day, index) => ({ ...day, day: chunk.startDay + index }));
+        for (const proposedDay of proposedDays) {
+          let candidateDay = proposedDay;
+          let accepted = false;
+          // Keep repair bounded per meal target. Independent findings in
+          // breakfast, lunch, and snack must not consume one shared allowance.
+          const targetRepairAttempts = new Map();
+          const maxDayRepairAttempts = 15;
+          for (let repairAttempt = 0; repairAttempt < maxDayRepairAttempts; repairAttempt += 1) {
+            const candidate = { ...assembled, days: [...assembled.days, candidateDay], summary: chunkProposal.summary, medicationSafety: chunkProposal.medicationSafety };
+            workingProposal = candidate;
+            try {
+              validateMealPlanProposal(candidate, { ...context, days: candidate.days.length });
+              assembled.days.push(candidateDay);
+              accepted = true;
+              if (repairAttempt > 0) {
+                const lastDiagnostic = validationDiagnostics[validationDiagnostics.length - 1];
+                if (lastDiagnostic && lastDiagnostic.day === candidateDay.day) lastDiagnostic.repairResult = "accepted";
+              }
+              break;
+            } catch (validationError) {
+              const diagnostic = describeMealPlanValidationFailure(validationError, candidate, { day: candidateDay.day, repairAttempt: repairAttempt + 1 });
+              validationDiagnostics.push(diagnostic);
+              validationFailures.push(diagnostic.rule);
+              const targets = identifyMealRepairTargets(validationError, candidate);
+              const targetKey = targets.length
+                ? `${targets[0].day}:${targets[0].meal}`
+                : `${candidateDay.day}:entire-day`;
+              const targetAttempt = (targetRepairAttempts.get(targetKey) || 0) + 1;
+              targetRepairAttempts.set(targetKey, targetAttempt);
+              logger.warn("ai.meal_plan.day_rejected", { uid, goal: context.goal, requestedDays: context.days, ...diagnostic });
+              if (targetAttempt >= 3 || repairAttempt === maxDayRepairAttempts - 1) {
+                diagnostic.repairResult = "exhausted";
+                diagnostic.finalReason = diagnostic.rule;
+                throw validationError;
+              }
+              if (targets.length) {
+                const repairResponse = await client.responses.create({
+                  model: openaiModel.value(),
+                  instructions: buildMealPlanInstructions({ ...context, days: candidate.days.length }),
+                  input: buildTargetedMealRepairInput(candidate, targets),
+                  reasoning: { effort: "low" },
+                  text: { verbosity: "medium", format: { type: "json_schema", name: "targeted_meal_repair", strict: true, schema: mealRepairSchema } },
+                  safety_identifier: createHash("sha256").update(uid).digest("hex"),
+                  max_output_tokens: 2500,
+                });
+                generationModel = repairResponse.model || generationModel;
+                const repaired = mergeTargetedMealRepairs(candidate, JSON.parse(repairResponse.output_text), targets);
+                candidateDay = repaired.days[repaired.days.length - 1];
+                repairHistory.push({ round: repairAttempt + 1, targets, day: candidateDay.day });
+              } else {
+                const dayContext = { ...context, days: 1, smoothieContext: candidateDay.day === 1 ? context.smoothieContext : null };
+                const dayResponse = await client.responses.create({
+                  model: openaiModel.value(),
+                  instructions: buildMealPlanInstructions(dayContext),
+                  input: `Regenerate only calendar day ${(context.continuation?.startDay || 1) + Number(candidateDay.day || 1) - 1} of ${context.continuation?.totalDays || context.days}. Correct this finding: ${diagnostic.rule}. Never repeat these exact locked dishes. Avoid recently used formats, and do not disguise repetition with cosmetic renaming: ${JSON.stringify([...(context.continuation?.lockedMeals || []), ...assembled.days.flatMap((day) => day.meals.map((meal) => `${meal.meal}: ${meal.food}`))])}.`,
+                  reasoning: { effort: "low" },
+                  text: { verbosity: "medium", format: { type: "json_schema", name: "replacement_meal_plan_day", strict: true, schema: mealPlanSchemaForDays(1) } },
+                  safety_identifier: createHash("sha256").update(uid).digest("hex"),
+                  max_output_tokens: 5000,
+                });
+                generationModel = dayResponse.model || generationModel;
+                const replacementDay = JSON.parse(dayResponse.output_text);
+                candidateDay = { ...replacementDay.days[0], day: proposedDay.day };
+                chunkProposal.medicationSafety = replacementDay.medicationSafety;
+                repairHistory.push({ round: repairAttempt + 1, targets: [{ day: proposedDay.day, meal: "entire-day", finding: diagnostic.rule }] });
+              }
+            }
+          }
+          if (!accepted) throw new Error(`Day ${proposedDay.day} exhausted its bounded repair attempts.`);
+        }
+      }
+      workingProposal = assembled;
+      return await finalizePlan(assembled, `chunked-${chunks.length}`);
+    } catch (error) {
+      const failureReason = String(error.message || "invalid chunked plan").slice(0, 300);
+      if (!validationFailures.includes(failureReason)) validationFailures.push(failureReason);
+      logger.error("ai.meal_plan.failed", { uid, goal: context.goal, days: context.days, status: error?.status, code: error?.code, message: error?.message, validationFailures, validationDiagnostics, repairHistory });
+      if (shouldRecordAiServiceIncident(error)) {
+        try { await recordAiServiceIncident("smartMealPlan", uid, error, { days: context.days, validationFailures, validationDiagnostics, repairHistory }); }
+        catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
+      }
+      await recordGenerationOutcome("smartMealPlan", shouldRecordAiServiceIncident(error) ? "serviceFailed" : "validationFailed");
+      await db.collection(`users/${uid}/mealPlanAiFailures`).add({ goal: context.goal, days: context.days, validationFailures, validationDiagnostics, repairHistory, createdAt: FieldValue.serverTimestamp() });
+      if (assembled.days.length > 0) {
+        const acceptedContext = { ...context, days: assembled.days.length };
+        const acceptedPlan = validateMealPlanProposal(assembled, acceptedContext);
+        logger.warn("ai.meal_plan.partial", {
+          uid,
+          goal: context.goal,
+          requestedDays: context.days,
+          acceptedDays: acceptedPlan.length,
+          failedDay: validationDiagnostics.at(-1)?.day || acceptedPlan.length + 1,
+        });
+        return {
+          plan: acceptedPlan,
+          nutritionIntelligence: summarizeMealPlanIntelligence(acceptedPlan, acceptedContext),
+          medicationSafety: assembled.medicationSafety,
+          source: "openai",
+          model: generationModel,
+          status: "partial",
+          requestedDays: context.days,
+          acceptedDays: acceptedPlan.length,
+          failedDay: validationDiagnostics.at(-1)?.day || acceptedPlan.length + 1,
+          retryable: true,
+          validationDiagnostics,
+          repairHistory,
+        };
+      }
+      throw new HttpsError("unavailable", "Astra could not complete every requested day within the bounded repair limit. No substitute plan was created.", { reason: "validation-failed", failedDay: validationDiagnostics.at(-1)?.day || null });
+    }
+  }
+  const maxAttempts = Math.min(6, Math.max(3, context.days + 2));
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let responseProposal = null;
+    try {
+      const pendingTargets = workingProposal && repairHistory.length
+        ? repairHistory[repairHistory.length - 1].targets
+        : [];
       const response = await client.responses.create({
         model: openaiModel.value(),
         instructions: buildMealPlanInstructions(context),
         input: feedback,
         reasoning: { effort: "low" },
-        text: { verbosity: "medium", format: { type: "json_schema", name: "personalized_meal_plan", strict: true, schema: mealPlanSchema } },
+        text: { verbosity: "medium", format: { type: "json_schema", name: pendingTargets.length ? "targeted_meal_repair" : "personalized_meal_plan", strict: true, schema: pendingTargets.length ? mealRepairSchema : mealPlanSchemaForDays(context.days) } },
         safety_identifier: createHash("sha256").update(uid).digest("hex"),
-        max_output_tokens: context.days > 3 ? 12000 : 9000,
+        max_output_tokens: pendingTargets.length ? 2500 : (context.days > 3 ? 12000 : 9000),
       });
-      const plan = validateMealPlanProposal(JSON.parse(response.output_text), context);
-      await db.collection(`users/${uid}/mealPlanAiHistory`).add({ goal: context.goal, days: context.days, summary: response.output_text.slice(0, 500), createdAt: FieldValue.serverTimestamp() });
-      logger.info("ai.meal_plan.generated", { uid, goal: context.goal, days: context.days, attempt: attempt + 1 });
-      await recordGenerationOutcome("smartMealPlan", "generated");
-      return { plan, nutritionIntelligence: summarizeMealPlanIntelligence(plan, context), medicationSafety: JSON.parse(response.output_text).medicationSafety, source: "openai", model: response.model || openaiModel.value() };
+      responseProposal = JSON.parse(response.output_text);
+      const candidateProposal = pendingTargets.length
+        ? mergeTargetedMealRepairs(workingProposal, responseProposal, pendingTargets)
+        : responseProposal;
+      workingProposal = candidateProposal;
+      generationModel = response.model || generationModel;
+      return await finalizePlan(candidateProposal, attempt + 1);
     } catch (error) {
       const failureReason = String(error.message || "invalid plan").slice(0, 300);
       validationFailures.push(failureReason);
-      feedback = `The prior plan failed application validation: ${failureReason}. Produce a different corrected plan. Follow every quantity format, meal order, culinary-coherence, and goal-fit requirement exactly.`;
-      if (attempt === 2) {
-        logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message, validationFailures });
+      if (error instanceof SyntaxError || !workingProposal) {
+        // A schema/API/JSON failure cannot be repaired at meal granularity. Preserve a
+        // parsed proposal as soon as one is available; otherwise retry the full request.
+        try {
+          const possibleOutput = error?.response?.output_text;
+          if (possibleOutput) workingProposal = JSON.parse(possibleOutput);
+        } catch { /* The next attempt remains a full-plan retry. */ }
+      }
+      if (!workingProposal && responseProposal) workingProposal = responseProposal;
+      const targets = identifyMealRepairTargets(error, workingProposal);
+      if (targets.length) {
+        repairHistory.push({ round: attempt + 1, targets });
+        feedback = buildTargetedMealRepairInput(workingProposal, targets);
+        logger.warn("ai.meal_plan.targeted_repair", { uid, goal: context.goal, days: context.days, attempt: attempt + 1, targets });
+      } else {
+        feedback = `The prior plan failed application validation: ${failureReason}. Produce a different corrected plan. Follow every quantity format, meal order, culinary-coherence, and goal-fit requirement exactly.`;
+      }
+      if (attempt === maxAttempts - 1) {
+        logger.error("ai.meal_plan.failed", { uid, goal: context.goal, status: error?.status, code: error?.code, message: error?.message, validationFailures, repairHistory });
         if (shouldRecordAiServiceIncident(error)) {
-          try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: 3, days: context.days, validationFailures }); }
+          try { await recordAiServiceIncident("smartMealPlan", uid, error, { attempts: maxAttempts, days: context.days, validationFailures, repairHistory }); }
           catch (incidentError) { logger.error("operations.incident_record.failed", { service: "smartMealPlan", message: incidentError?.message }); }
         }
         await recordGenerationOutcome("smartMealPlan", shouldRecordAiServiceIncident(error) ? "serviceFailed" : "validationFailed");
@@ -922,9 +1094,10 @@ export const generateSmartMealPlan = onCall({ secrets: [openaiSecret], timeoutSe
           goal: context.goal,
           days: context.days,
           validationFailures,
+          repairHistory,
           createdAt: FieldValue.serverTimestamp(),
         });
-        throw new HttpsError("unavailable", "Astra could not produce a meal plan that passed every validation check. No substitute plan was created.", { reason: "validation-failed", attempts: 3 });
+        throw new HttpsError("unavailable", "Astra could not produce a meal plan that passed every validation check. No substitute plan was created.", { reason: "validation-failed", attempts: maxAttempts });
       }
     }
   }
@@ -1200,8 +1373,9 @@ async function reserveFoundingVip(uid) {
     if (existing?.status === "redeemed") return { foundingVip: false, foundingVipNumber: null };
     const completed = Number(counterSnapshot.data()?.completed || 0);
     const reserved = Math.max(0, Number(counterSnapshot.data()?.reserved || 0) - (existing?.status === "pending" ? 1 : 0));
-    if (completed + reserved >= VIP_FAMILY_OFFER_LIMIT) return { foundingVip: false, foundingVipNumber: null };
-    const number = completed + reserved + 1;
+    const decision = foundingReservationDecision({ completed, reserved, limit: VIP_FAMILY_OFFER_LIMIT });
+    if (!decision.available) return { foundingVip: false, foundingVipNumber: null };
+    const number = decision.nextNumber;
     transaction.set(counterRef, { completed, reserved: reserved + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     transaction.set(reservationRef, { uid, number, status: "pending", expiresAt: Timestamp.fromMillis(now + 35 * 60 * 1000), createdAt: existing?.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     return { foundingVip: true, foundingVipNumber: number };
@@ -1236,6 +1410,7 @@ export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePric
   }
   const founding = Number(tierId) === 5 ? await reserveFoundingVip(request.auth.uid) : { foundingVip: false, foundingVipNumber: null };
   if (founding.foundingVip) key = priceKey(4, billingMode);
+  const canonicalBilling = canonicalPlanForCheckout(tierId, billingMode, { foundingVip: founding.foundingVip });
   const price = prices[key];
   if (!price) throw new HttpsError("failed-precondition", "Stripe price is not configured.");
   const subscriptionMetadata = {
@@ -1243,6 +1418,8 @@ export const createCheckoutSession = onCall({ secrets: [stripeSecret, stripePric
     tierId: String(tierId),
     foundingVip: String(founding.foundingVip),
     foundingVipNumber: founding.foundingVipNumber ? String(founding.foundingVipNumber) : "",
+    canonicalPlanId: canonicalBilling.planId,
+    billingVariantId: canonicalBilling.billingVariantId,
     kernelIds: selectedKernels.join(","),
   };
   try {
@@ -1345,6 +1522,8 @@ async function writeEntitlement(uid, subscription, prices) {
   const billingMode = billingModeFromPrice(priceId, prices);
   const foundingVip = tier === 5 && subscription.metadata?.foundingVip === "true";
   const foundingVipNumber = foundingVip ? Number(subscription.metadata?.foundingVipNumber || 0) || null : null;
+  const canonicalPlanId = String(subscription.metadata?.canonicalPlanId || (tier === 5 ? (foundingVip ? "vip-founding" : "vip-regular") : `level-${tier}`));
+  const billingVariantId = String(subscription.metadata?.billingVariantId || `${canonicalPlanId}-${billingMode || "unknown"}`);
   const pendingRef = db.doc(`users/${uid}/private/pendingKernelSelection`);
   const pendingSnapshot = await pendingRef.get();
   const pending = pendingSnapshot.data() || {};
@@ -1375,6 +1554,8 @@ async function writeEntitlement(uid, subscription, prices) {
     householdCircleIncluded: tier === 5,
     foundingVip,
     foundingVipNumber,
+    canonicalPlanId,
+    billingVariantId,
     kernels,
     updatedAt: FieldValue.serverTimestamp(),
   };

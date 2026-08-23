@@ -163,7 +163,7 @@ function ScopedSmoothieLab({ storageScope }) {
   const recipe = generatedRecipe || previewRecipe;
   const nourishmentMatrix = useMemo(() => evaluateNourishmentMatrix(recipe.ingredients), [recipe.ingredients]);
   const showingAlternatePreview = !generatedRecipe && alternateIndex > 0;
-  const displayedPreviewIngredients = generatedRecipe?.ingredients || (showingAlternatePreview ? previewRecipe.ingredients : null);
+  const displayedPreviewIngredients = showingAlternatePreview ? previewRecipe.ingredients : null;
   useEffect(() => {
     const smoothieContext = {
       goal,
@@ -214,22 +214,35 @@ function ScopedSmoothieLab({ storageScope }) {
       [kitchenZone]: exists ? current.filter((item) => item.toLowerCase() !== name.toLowerCase()) : [...current, name],
     }));
   };
-  const toggleIngredient = (name) => setSelectedNames((current) => {
+  const beginRecipeRevision = () => {
+    if (!generatedRecipe) return;
+    setGeneratedRecipe(null);
+    setGenerationStatus("idle");
+    setGenerationMessage("");
+    setSaved(false);
+  };
+  const toggleIngredient = (name) => {
+    beginRecipeRevision();
+    setSelectedNames((current) => {
     const next = current.includes(name) ? current.filter((item) => item !== name) : [...current, name];
     saveSmoothiePreference(storageScope, selectedGoals, {
       excludedNames: baseRecipe.ingredients.map((item) => item.sourceName || item.name).filter((item) => !next.includes(item)),
       ingredientReplacements,
     });
     return next;
-  });
-  const replaceIngredient = (name, replacement) => setIngredientReplacements((current) => {
+    });
+  };
+  const replaceIngredient = (name, replacement) => {
+    beginRecipeRevision();
+    setIngredientReplacements((current) => {
     const next = { ...current, [name]: replacement };
     saveSmoothiePreference(storageScope, selectedGoals, {
       excludedNames: baseRecipe.ingredients.map((item) => item.sourceName || item.name).filter((item) => !selectedNames.includes(item)),
       ingredientReplacements: next,
     });
     return next;
-  });
+    });
+  };
   const toggleGoal = (value) => setSelectedGoals((current) => current.includes(value)
     ? (current.length === 1 ? current : current.filter((item) => item !== value))
     : [...current, value]);

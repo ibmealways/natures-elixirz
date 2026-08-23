@@ -6,6 +6,41 @@ export const LEGACY_KERNELS_BY_TIER = {
   4: [...SELECTABLE_KERNELS], 5: [...SELECTABLE_KERNELS, "vip"],
 };
 
+export const CANONICAL_PLAN_CATALOG = Object.freeze({
+  "level-1": Object.freeze({ planId: "level-1", tier: 1, monthlyCents: 1599, yearlyCents: 15000 }),
+  "level-2": Object.freeze({ planId: "level-2", tier: 2, monthlyCents: 2999, yearlyCents: 30000 }),
+  "level-3": Object.freeze({ planId: "level-3", tier: 3, monthlyCents: 4499, yearlyCents: 48000 }),
+  "level-4": Object.freeze({ planId: "level-4", tier: 4, monthlyCents: 5999, yearlyCents: 65000 }),
+  "vip-founding": Object.freeze({ planId: "vip-founding", tier: 5, founding: true, monthlyCents: 5999, yearlyCents: 65000 }),
+  "vip-regular": Object.freeze({ planId: "vip-regular", tier: 5, founding: false, monthlyCents: 9999, yearlyCents: 108000 }),
+});
+
+export function canonicalPlan(planId, billingMode) {
+  const plan = CANONICAL_PLAN_CATALOG[String(planId)];
+  if (!plan || !BILLING_MODES.includes(billingMode)) throw new Error("Invalid canonical billing variant.");
+  return Object.freeze({
+    ...plan,
+    billingMode,
+    amountCents: billingMode === "monthly" ? plan.monthlyCents : plan.yearlyCents,
+    billingVariantId: `${plan.planId}-${billingMode}`,
+    kernels: plan.tier === 5 ? [...SELECTABLE_KERNELS, "vip"] : null,
+  });
+}
+
+export function canonicalPlanForCheckout(tierId, billingMode, { foundingVip = false } = {}) {
+  const tier = Number(tierId);
+  const planId = tier === 5 ? (foundingVip ? "vip-founding" : "vip-regular") : `level-${tier}`;
+  return canonicalPlan(planId, billingMode);
+}
+
+export function foundingReservationDecision({ completed = 0, reserved = 0, limit = 5000 } = {}) {
+  const completedCount = Math.max(0, Math.floor(Number(completed) || 0));
+  const reservedCount = Math.max(0, Math.floor(Number(reserved) || 0));
+  const poolLimit = Math.max(1, Math.floor(Number(limit) || 5000));
+  const allocated = completedCount + reservedCount;
+  return Object.freeze({ available: allocated < poolLimit, allocated, nextNumber: allocated < poolLimit ? allocated + 1 : null, remaining: Math.max(0, poolLimit - allocated) });
+}
+
 export function sanitizeKernelIds(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.map(String).filter((id) => SELECTABLE_KERNELS.includes(id)))];

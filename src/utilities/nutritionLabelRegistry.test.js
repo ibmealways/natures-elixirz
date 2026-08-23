@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getNutritionLabels, restoreNutritionLabels, saveNutritionLabels } from "./nutritionLabelRegistry";
+import { findNutritionLabel, getNutritionLabels, restoreNutritionLabels, saveNutritionLabels, upsertNutritionLabel } from "./nutritionLabelRegistry";
 
 const label = { brand: "Example", productName: "Protein", ingredientName: "Hemp protein", servingAmount: 1, servingUnit: "scoop", servingGrams: 30, nutrients: { energyKcal: 100, proteinG: 20, fatG: 2, carbohydrateG: 3, sodiumMg: 50 }, labelCheckedAt: "2026-01-02T00:00:00.000Z" };
 
@@ -22,5 +22,17 @@ describe("Nutrition Facts registry", () => {
   });
   it("rejects incomplete package records", () => {
     expect(() => saveNutritionLabels([{ ...label, servingGrams: "" }], "subscriber-a")).toThrow(/gram weight/);
+  });
+  it("reuses a yogurt label for prepared Greek yogurt names", () => {
+    expect(findNutritionLabel([{ ...label, ingredientName: "Yogurt" }], "Plain Greek yogurt")?.ingredientName).toBe("Yogurt");
+  });
+  it("does not merge distinct milk types", () => {
+    expect(findNutritionLabel([{ ...label, ingredientName: "Milk" }], "Unsweetened soy milk")).toBeUndefined();
+  });
+  it("replaces an existing canonical ingredient record instead of creating a duplicate", () => {
+    upsertNutritionLabel([], { ...label, id: "first", ingredientName: "Yogurt" }, "subscriber-a");
+    const saved = upsertNutritionLabel(getNutritionLabels("subscriber-a"), { ...label, id: "second", ingredientName: "Plain Greek yogurt", brand: "Updated" }, "subscriber-a");
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ id: "second", brand: "Updated" });
   });
 });

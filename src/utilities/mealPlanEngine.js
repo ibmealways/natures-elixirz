@@ -1,4 +1,5 @@
 import { generatePersonalizedSmoothie, pantryCatalog, profileVariationSeed } from "./personalizedSmoothieEngine";
+import { consolidateShoppingIngredients, isHouseholdStapleIngredient } from "./shoppingIntelligence";
 
 const goalAccents = {
   focus: ["blueberries", "spinach", "roasted broccoli", "fresh herbs"],
@@ -322,7 +323,7 @@ function buildPantryFirstMeal(moment, profile, goal, dayIndex, recognized, occas
   const specificInstructions = eggRiceDinner ? [
     proteinPreparationInstruction(proteinName),
     `Cook ${grainName} according to its package directions and cool it briefly so the grains stay separate.`,
-    `SautÃ© ${vegetableNames || "the vegetables"} until tender, add the rice, then stir in the cooked egg until evenly combined.`,
+    `Sauté ${vegetableNames || "the vegetables"} until tender, add the rice, then stir in the cooked egg until evenly combined.`,
     seasoningRecommendation ? `Season the fried rice lightly with ${seasoningRecommendation.name} to taste.` : "Season lightly and serve as one composed dish.",
     "Serve one planned portion and refrigerate perishable leftovers within two hours.",
   ] : requiresCooking ? moment === "Breakfast" ? [
@@ -403,7 +404,7 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
         food: `${vegetable ? `${vegetable.name} eggs` : "Eggs"} with ${bread.name}${fruit ? ` and a ${fruit.name} side` : ""}`,
         items: [egg, bread, vegetable, fruit],
         requiresCooking: true,
-        steps: [proteinPreparationInstruction(egg.name), `Toast or warm ${bread.name}.`, ...(vegetable ? [`SautÃ© ${vegetable.name} until tender, then fold it into the eggs.`] : []), ...(fruit ? [`Wash and portion ${fruit.name} as a separate fresh side.`] : [])],
+        steps: [proteinPreparationInstruction(egg.name), `Toast or warm ${bread.name}.`, ...(vegetable ? [`Sauté ${vegetable.name} until tender, then fold it into the eggs.`] : []), ...(fruit ? [`Wash and portion ${fruit.name} as a separate fresh side.`] : [])],
       };
       if (yogurt && fruit && (seed || oats)) return {
         food: `${fruit.name} yogurt breakfast bowl with ${(oats || seed).name}${oats && seed ? ` and ${seed.name}` : ""}`,
@@ -430,10 +431,10 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
       if ((chicken || fish) && rice && vegetable) {
         const protein = chicken || fish;
         return { food: `${protein.name} with ${rice.name}, ${vegetable.name}${secondVegetable ? `, and ${secondVegetable.name}` : ""}`, items: [protein, rice, vegetable, secondVegetable], requiresCooking: true,
-          steps: [proteinPreparationInstruction(protein.name), `Cook ${rice.name} according to its package directions.`, `SautÃ© or roast ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables as one meal."] };
+          steps: [proteinPreparationInstruction(protein.name), `Cook ${rice.name} according to its package directions.`, `Sauté or roast ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables as one meal."] };
       }
       if (legume && rice && vegetable) return { food: `${legume.name} and ${rice.name} vegetable bowl`, items: [legume, rice, vegetable, secondVegetable], requiresCooking: true,
-        steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `Cook ${rice.name} according to its package directions.`, `SautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Combine the beans, grain, and vegetables in one bowl."] };
+        steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `Cook ${rice.name} according to its package directions.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Combine the beans, grain, and vegetables in one bowl."] };
       if (deli && bread && vegetable) return { food: `${deli.name} sandwich with ${vegetable.name}`, items: [deli, bread, vegetable], requiresCooking: false,
         steps: [`Keep ${deli.name} refrigerated and follow its ready-to-eat package directions.`, `Layer it with ${vegetable.name} on ${bread.name}.`, "Serve promptly and refrigerate leftovers."] };
     }
@@ -447,12 +448,12 @@ function buildCulinaryPantryMeal(moment, profile, goal, dayIndex, recognized, oc
     }
     if (moment === "Dinner") {
       if (egg && rice && vegetable && offset % 2 === 0) return { food: `Vegetable egg fried rice with ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [egg, rice, vegetable, secondVegetable], requiresCooking: true,
-        steps: [proteinPreparationInstruction(egg.name), `Cook ${rice.name} and cool it briefly so the grains remain separate.`, `SautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}, add the rice, then fold in the cooked egg.`, "Serve hot as one composed dish."] };
+        steps: [proteinPreparationInstruction(egg.name), `Cook ${rice.name} and cool it briefly so the grains remain separate.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}, add the rice, then fold in the cooked egg.`, "Serve hot as one composed dish."] };
       const protein = dinnerProtein;
       if (protein && rice && vegetable) return { food: `${protein.name} with ${rice.name} and roasted ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""}`, items: [protein, rice, vegetable, secondVegetable], requiresCooking: true,
-        steps: [proteinPreparationInstruction(protein.name), `Cook ${rice.name} according to its package directions.`, `Roast or sautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables together."] };
+        steps: [proteinPreparationInstruction(protein.name), `Cook ${rice.name} according to its package directions.`, `Roast or sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, "Plate the protein, grain, and vegetables together."] };
       if (legume && vegetable) return { food: `${legume.name} and vegetable skillet${rice ? ` with ${rice.name}` : ""}`, items: [legume, vegetable, secondVegetable, rice], requiresCooking: true,
-        steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `SautÃ© ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, ...(rice ? [`Cook ${rice.name} according to its package directions.`] : []), "Combine and serve as one skillet meal."] };
+        steps: [`Drain and rinse ${legume.name} if canned, then warm gently.`, `Sauté ${vegetable.name}${secondVegetable ? ` and ${secondVegetable.name}` : ""} until tender.`, ...(rice ? [`Cook ${rice.name} according to its package directions.`] : []), "Combine and serve as one skillet meal."] };
     }
     return null;
   })();
@@ -659,10 +660,11 @@ export function buildGroceryList(plan, kitchenItems = []) {
   const foods = plan.flatMap((day) => day.meals.map((item) => item.food));
   const pantryMatches = plan.flatMap((day) => day.meals.map((item) => item.pantryMatch).filter(Boolean));
   const requiredIngredients = [...new Map(plan.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients || []))
-    .filter((item) => item.name && !/water|ice|protein listed in meal/i.test(item.name))
+    .filter((item) => item.name && !/protein listed in meal/i.test(item.name))
     .map((item) => [normalizedGroceryName(item.name), item.name])).values()];
   const recognizedKitchen = recognizeKitchen(kitchenItems);
   const available = requiredIngredients.filter((item) => kitchenContains(item, kitchenItems, recognizedKitchen));
   const missing = requiredIngredients.filter((item) => !kitchenContains(item, kitchenItems, recognizedKitchen));
-  return { foundations: missing, missing, available, plannedMeals: [...new Set(foods)], pantryMatches: [...new Set(pantryMatches)] };
+  const details = consolidateShoppingIngredients(plan.flatMap((day) => day.meals.flatMap((meal) => meal.ingredients || [])).filter((item) => item.name && !/protein listed in meal/i.test(item.name)), (name) => kitchenContains(name, kitchenItems, recognizedKitchen));
+  return { foundations: missing.filter((item) => !isHouseholdStapleIngredient(item)), missing: missing.filter((item) => !isHouseholdStapleIngredient(item)), available, missingDetails: details.filter((item) => item.status === "need-to-purchase"), availableDetails: details.filter((item) => item.status === "already-in-kitchen"), stapleDetails: details.filter((item) => item.status === "household-staple"), plannedMeals: [...new Set(foods)], pantryMatches: [...new Set(pantryMatches)] };
 }

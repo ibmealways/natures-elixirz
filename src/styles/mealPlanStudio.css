@@ -37,3 +37,64 @@
 .interactive-harvest-list li{border-radius:14px;flex:1 1 230px;justify-content:flex-start}.interactive-harvest-list li strong{flex:1;color:#e8fff4;font-weight:650}.interactive-harvest-list li button{display:inline-flex;align-items:center;gap:.28rem;padding:.35rem .48rem;border:1px solid rgba(91,223,158,.38);border-radius:999px;background:rgba(35,183,126,.12);color:#79efb6;font-size:.58rem;font-weight:800;text-transform:capitalize;cursor:pointer}.interactive-harvest-list li button:hover,.interactive-harvest-list li button:focus-visible{background:#69e6a8;color:#03140d;outline:none}.harvest-stocked-message{padding:.5rem .65rem;border:1px solid rgba(91,223,158,.35);border-radius:10px;background:rgba(35,183,126,.12);color:#8ff1c1!important;font-weight:750}
 .ingredient-availability{display:inline-block;margin-left:.45rem;padding:.12rem .35rem;border-radius:999px;font-size:.52rem;font-style:normal;text-transform:uppercase;letter-spacing:.08em}.ingredient-availability.on-hand{color:#8ff4c8;background:rgba(34,197,94,.13);border:1px solid rgba(74,222,128,.2)}.ingredient-availability.needed{color:#fde68a;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.22)}.ingredient-needed-action{font-family:inherit;line-height:1;cursor:pointer}.ingredient-needed-action:hover,.ingredient-needed-action:focus-visible{color:#1b1200;background:#f6c755;border-color:#ffe29a;outline:2px solid rgba(246,199,85,.35);outline-offset:2px}.pantry-driven-note{margin-top:.65rem;color:#88bfa8;font-size:.65rem;line-height:1.45}
 @media(max-width:650px){.nourish-title-band h1{font-size:3.1rem}.nourish-panorama{min-height:380px;background-size:cover;background-position:center}.meal-realm-label{transform:scale(.82)}.meal-realm-label.lunch{left:24%}.meal-realm-label.snack{left:48%}.goal-garden{grid-template-columns:1fr}.planner-heading,.plan-horizon,.constellation-overview,.meal-kitchen-heading,.meal-collage-heading,.calendar-heading{align-items:flex-start;flex-direction:column}.plan-horizon>div:last-child{width:100%}.plan-horizon button{min-width:0;flex:1}.day-orbit{grid-template-columns:1fr}.day-marker{margin-bottom:.25rem}.meal-timeline{grid-template-columns:1fr;overflow:visible}.constellation-metric{width:92px;height:92px}.calendar-heading>p{text-align:left}.calendar-grid>article,.calendar-grid>i{min-height:46px;padding:.3rem}.calendar-events span{font-size:0}.calendar-events svg{width:12px;height:12px}.frequency-event{font-size:.46rem}.meal-collage-grid{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}.meal-collage-card,.meal-collage-card:first-child{min-width:82vw;height:330px;scroll-snap-align:center}.collage-day-picker{max-width:100%}}
+.meal-generation-modes{border:1px solid rgba(77,233,207,.3);border-radius:20px;padding:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:20px 0;background:rgba(5,20,35,.7)}
+.meal-generation-modes legend{padding:0 9px;color:#8fffe4;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.meal-generation-modes button{display:flex;flex-direction:column;gap:6px;text-align:left;padding:16px 18px;border:1px solid rgba(111,209,229,.3);border-radius:16px;background:#071a28;color:#f4fbff;font:inherit;font-weight:800;cursor:pointer}
+.meal-generation-modes button small{color:#9fb2c0;font-weight:400;line-height:1.45}
+.meal-generation-modes button.active{border-color:#55f1cf;background:linear-gradient(135deg,rgba(32,174,137,.25),rgba(28,106,169,.22));box-shadow:0 0 22px rgba(42,225,193,.13)}
+@media(max-width:700px){.meal-generation-modes{grid-template-columns:1fr}}
+.meal-plan-recovery {
+  min-height: 70vh;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 1rem;
+  padding: clamp(2rem, 7vw, 6rem);
+}
+.constellation-overview.generation-pending > div:nth-child(2) {
+  display: none;
+}
+
+.constellation-overview .generation-pending-copy {
+  max-width: 760px;
+}
+.meal-ingredient-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.meal-ingredient-row > span { flex: 1 1 auto; }
+
+.ingredient-swap-trigger {
+  border: 1px solid rgba(92, 238, 202, 0.45);
+  border-radius: 999px;
+  background: rgba(8, 54, 55, 0.75);
+  color: #8ff7dc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.55rem;
+}
+
+.ingredient-swap-trigger:hover,
+.ingredient-swap-trigger:focus-visible { border-color: #66f2d0; color: #fff; }
+
+.ingredient-swap-picker {
+  display: grid;
+  flex: 1 0 100%;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.45rem;
+}
+
+.ingredient-swap-picker span { color: #a8b9c5; font-size: 0.72rem; }
+
+.ingredient-swap-picker select {
+  width: 100%;
+  border: 1px solid rgba(92, 238, 202, 0.38);
+  border-radius: 0.65rem;
+  background: #071723;
+  color: #f3fffb;
+  padding: 0.55rem 0.65rem;
+}
