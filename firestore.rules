@@ -21,6 +21,21 @@ service cloud.firestore {
       }
     }
 
+    // Admin incident records are accessible only through server-authorized functions.
+    match /securityIncidents/{incidentId} {
+      allow read, write: if false;
+    }
+
+    // Append-only audit events are also server-only.
+    match /securityIncidentAudit/{auditId} {
+      allow read, write: if false;
+    }
+
+    // Server-owned rate-limit counters must never be client-readable or writable.
+    match /securityIncidentAdminUsage/{usageId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

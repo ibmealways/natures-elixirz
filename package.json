@@ -22,7 +22,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:functions": "npm --prefix functions test",
-    "verify": "npm test && npm run test:functions && npm run build",
+    "test:firestore-rules": "node tests/run-firestore-rules-tests.cjs",
+    "verify": "npm test && npm run test:functions && npm run test:firestore-rules && npm run build",
     "audit:launch": "node scripts/audit-launch-gates.cjs",
     "deploy:public": "npm run build && firebase deploy --only firestore,hosting",
     "deploy:functions": "firebase deploy --only functions"
@@ -40,6 +41,7 @@
     ]
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@tailwindcss/postcss": "^4.1.14",
     "@vitejs/plugin-react": "^6.0.0",
     "autoprefixer": "^10.4.21",

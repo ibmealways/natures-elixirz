@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    exclude: ["functions/**", "node_modules/**", "dist/**"],
+    exclude: ["functions/**", "node_modules/**", "dist/**", "tests/firestore-security-incidents.test.mjs"],
     coverage: {
       reporter: ["text", "html"],
     },

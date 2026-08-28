@@ -20,6 +20,7 @@ import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
 import { assessGenerationReliability, backupReadiness, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
+import { assertAllowedFields, assertAuthorizedIncidentAdmin, assertClosable, assertCurrentVersion, assertExpectedVersion, assertIncidentAction, assertIncidentId, assertIncidentMutable, assertMutationId, assertReplayMatches, assertTransition, auditIdForMutation, boundedAppend, changedFieldCategories, incidentIdForMutation, INCIDENT_LIMITS, mutationFingerprint, normalizeAffectedUserAssessment, normalizeContainmentAction, normalizeCounselDecision, normalizeEvidenceReference, normalizeHbnrAssessment, normalizeIncidentCreate, normalizeIncidentUpdate, normalizeNotificationDecision, normalizePostIncidentReview, normalizeReason, normalizeTechnicalFinding, normalizeTimelineEvent } from "./security-incident.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   astraReplySchema,
@@ -367,6 +368,28 @@ async function requireBetaAdmin(request) {
   return request.auth.uid;
 }
 
+async function requireIncidentAdmin(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in as an incident-response administrator.");
+  const snapshot = await db.doc(`betaAdmins/${request.auth.uid}`).get();
+  try { return assertAuthorizedIncidentAdmin(request.auth, snapshot.data()); }
+  catch { throw new HttpsError("permission-denied", "Incident-response administrator access is required."); }
+}
+
+function incidentResult(snapshot) {
+  return { incidentId: snapshot.id, ...snapshot.data() };
+}
+
+function incidentAudit({ incidentId, actorUid, action, mutationId, requestFingerprint, previous = {}, next = {}, reason = null }) {
+  return {
+    incidentId, actorUid, action, mutationId, requestFingerprint,
+    previousStatus: previous.status || null, newStatus: next.status || previous.status || null,
+    previousVersion: Number(previous.version || 0), newVersion: Number(next.version || previous.version || 0),
+    changedFieldCategories: changedFieldCategories(previous, next),
+    reason: normalizeReason(reason),
+    createdAt: FieldValue.serverTimestamp(),
+  };
+}
+
 function safeTester(testUser, record = {}) {
   const expiration = record.expiresAt || null;
   const expired = Boolean(expiration && Date.parse(expiration) <= Date.now());
@@ -532,6 +555,173 @@ export const registerBetaActivity = onCall({ invoker: "public", enforceAppCheck 
   return { tracked: false, disabled: true };
 });
 
+async function mutateSecurityIncident({ incidentId, actorUid, action, mutationId, requestFingerprint, expectedVersion, reason, build }) {
+  assertIncidentId(incidentId);
+  assertMutationId(mutationId);
+  assertExpectedVersion(expectedVersion);
+  const incidentRef = db.doc(`securityIncidents/${incidentId}`);
+  const auditRef = db.doc(`securityIncidentAudit/${auditIdForMutation(incidentId, mutationId)}`);
+  let replayed = false;
+  await db.runTransaction(async (transaction) => {
+    const incidentSnapshot = await transaction.get(incidentRef);
+    const auditSnapshot = await transaction.get(auditRef);
+    if (!incidentSnapshot.exists) throw new HttpsError("not-found", "Incident record was not found.");
+    if (auditSnapshot.exists) {
+      try { assertReplayMatches(auditSnapshot.data(), { incidentId, actorUid, action, mutationId, requestFingerprint }); }
+      catch (error) { throw new HttpsError("already-exists", error.message); }
+      replayed = true;
+      return;
+    }
+    const previous = incidentSnapshot.data() || {};
+    try { assertIncidentMutable(previous); }
+    catch (error) { throw new HttpsError("failed-precondition", error.message); }
+    try { assertCurrentVersion(previous.version, expectedVersion); }
+    catch { throw new HttpsError("aborted", "Incident changed since it was loaded. Refresh and try again."); }
+    let changes;
+    try { changes = await build(previous); }
+    catch (error) { throw error instanceof HttpsError ? error : new HttpsError("failed-precondition", error.message); }
+    const nextVersion = expectedVersion + 1;
+    const persisted = { ...changes, version: nextVersion, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid };
+    const audited = { ...previous, ...changes, version: nextVersion };
+    transaction.set(incidentRef, persisted, { merge: true });
+    transaction.create(auditRef, incidentAudit({ incidentId, actorUid, action, mutationId, requestFingerprint, previous, next: audited, reason }));
+  });
+  return { incident: incidentResult(await incidentRef.get()), replayed };
+}
+
+function incidentPayload(request, allowed) {
+  try { return assertAllowedFields(request.data || {}, allowed, "Callable request"); }
+  catch (error) { throw new HttpsError("invalid-argument", error.message); }
+}
+function normalized(normalizer, value, authority) {
+  try { return normalizer(value, authority); }
+  catch (error) { throw new HttpsError("invalid-argument", error.message); }
+}
+
+export const manageSecurityIncidents = onCall({ invoker: "public", enforceAppCheck }, async (request) => {
+  const actorUid = await requireIncidentAdmin(request);
+  const action = String(request.data?.action || "");
+  try { assertIncidentAction(action); }
+  catch (error) { throw new HttpsError("invalid-argument", error.message); }
+
+  if (action === "list") {
+    incidentPayload(request, ["action"]);
+    const snapshot = await db.collection("securityIncidents").orderBy("updatedAt", "desc").limit(100).get();
+    return { incidents: snapshot.docs.map(incidentResult) };
+  }
+  if (action === "create") {
+    const data = incidentPayload(request, ["action", "mutationId", "reason", "incident"]);
+    const mutationId = normalized(assertMutationId, data.mutationId);
+    const incidentId = incidentIdForMutation(actorUid, mutationId);
+    const incidentRef = db.doc(`securityIncidents/${incidentId}`);
+    const auditRef = db.doc(`securityIncidentAudit/${auditIdForMutation(incidentId, mutationId)}`);
+    const day = new Date().toISOString().slice(0, 10);
+    const usageRef = db.doc(`securityIncidentAdminUsage/${actorUid}_${day}`);
+    const initial = normalized(normalizeIncidentCreate, data.incident);
+    const requestFingerprint = normalized(mutationFingerprint, data);
+    let replayed = false;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(incidentRef);
+      const audit = await transaction.get(auditRef);
+      const usage = await transaction.get(usageRef);
+      if (existing.exists && audit.exists) {
+        try { assertReplayMatches(audit.data(), { incidentId, actorUid, action, mutationId, requestFingerprint }); }
+        catch (error) { throw new HttpsError("already-exists", error.message); }
+        replayed = true;
+        return;
+      }
+      if (existing.exists || audit.exists) throw new HttpsError("data-loss", "Incident creation integrity check failed.");
+      const priorCount = Number(usage.data()?.count || 0);
+      if (priorCount >= INCIDENT_LIMITS.incidentsPerAdminPerDay) throw new HttpsError("resource-exhausted", "Daily incident-record creation limit reached.");
+      const now = Timestamp.now();
+      const incident = { ...initial, incidentId, version: 1, createdByUid: actorUid, createdAt: now, updatedAt: now, updatedByUid: actorUid, reportedAt: now, timeline: [{ eventType: "INCIDENT_REPORTED", description: "Incident record created for internal assessment.", actorUid, sourceReference: null, timestamp: now }] };
+      transaction.create(incidentRef, incident);
+      transaction.create(auditRef, incidentAudit({ incidentId, actorUid, action, mutationId, requestFingerprint, next: incident, reason: data.reason }));
+      transaction.set(usageRef, { uid: actorUid, day, count: priorCount + 1, updatedAt: FieldValue.serverTimestamp() });
+    });
+    return { incident: incidentResult(await incidentRef.get()), replayed };
+  }
+
+  const readAllowed = action === "get" ? ["action", "incidentId"] : null;
+  if (readAllowed) {
+    const data = incidentPayload(request, readAllowed);
+    const incidentId = normalized(assertIncidentId, data.incidentId);
+    const incidentSnapshot = await db.doc(`securityIncidents/${incidentId}`).get();
+    if (!incidentSnapshot.exists) throw new HttpsError("not-found", "Incident record was not found.");
+    const auditSnapshot = await db.collection("securityIncidentAudit").where("incidentId", "==", incidentId).limit(INCIDENT_LIMITS.auditsReturned).get();
+    const audits = auditSnapshot.docs.map((item) => ({ auditId: item.id, ...item.data() })).sort((a, b) => Number(a.createdAt?.toMillis?.() || 0) - Number(b.createdAt?.toMillis?.() || 0));
+    return { incident: incidentResult(incidentSnapshot), audits };
+  }
+
+  const payloadKey = { update: "changes", transition: "nextStatus", addTimeline: "event", addContainment: "item", addEvidence: "item", addTechnicalFinding: "finding", setAffectedAssessment: "assessment", setHbnrAssessment: "assessment", recordCounselDecision: "decision", recordNotificationDecision: "decision", setPostIncidentReview: "review", close: "closureSummary" }[action];
+  const allowed = ["action", "incidentId", "mutationId", "expectedVersion", "reason", ...(payloadKey ? [payloadKey] : []), ...(action === "close" ? ["postIncidentReview"] : [])];
+  const data = incidentPayload(request, allowed);
+  const incidentId = normalized(assertIncidentId, data.incidentId);
+  const mutationId = normalized(assertMutationId, data.mutationId);
+  const expectedVersion = normalized(assertExpectedVersion, data.expectedVersion);
+  const requestFingerprint = normalized(mutationFingerprint, data);
+  const mutate = (build) => mutateSecurityIncident({ incidentId, actorUid, action, mutationId, requestFingerprint, expectedVersion, reason: data.reason, build });
+
+  if (action === "update") return mutate(async () => normalized(normalizeIncidentUpdate, data.changes));
+  if (action === "transition") return mutate(async (previous) => ({ status: normalized(assertTransition, previous.status, data.nextStatus) }));
+  if (action === "addTimeline") {
+    const event = normalized(normalizeTimelineEvent, data.event, { actorUid, timestamp: Timestamp.now() });
+    return mutate(async (previous) => ({ timeline: boundedAppend(previous.timeline, event, INCIDENT_LIMITS.timeline, "Timeline") }));
+  }
+  if (action === "addContainment") {
+    const item = normalized(normalizeContainmentAction, data.item, { recordedByUid: actorUid, recordedAt: Timestamp.now() });
+    return mutate(async (previous) => {
+      const current = Array.isArray(previous.containmentActions) ? previous.containmentActions : [];
+      const without = current.filter((entry) => entry.checklistId !== item.checklistId);
+      if (without.length === current.length && current.length >= INCIDENT_LIMITS.containment) throw new HttpsError("resource-exhausted", "Containment checklist limit reached.");
+      return { containmentActions: [...without, item], containmentStatus: "IN_PROGRESS" };
+    });
+  }
+  if (action === "addEvidence") {
+    const item = normalized(normalizeEvidenceReference, data.item, { evidenceId: randomUUID(), preservedByUid: actorUid, preservedAt: Timestamp.now() });
+    return mutate(async (previous) => ({ evidenceReferences: boundedAppend(previous.evidenceReferences, item, INCIDENT_LIMITS.evidence, "Evidence reference"), evidencePreservationStatus: "IN_PROGRESS" }));
+  }
+  if (action === "addTechnicalFinding") {
+    const finding = normalized(normalizeTechnicalFinding, data.finding, { recordedByUid: actorUid, recordedAt: Timestamp.now() });
+    return mutate(async (previous) => ({ technicalFindings: boundedAppend(previous.technicalFindings, finding, INCIDENT_LIMITS.findings, "Technical finding") }));
+  }
+  if (action === "setAffectedAssessment") {
+    const assessment = normalized(normalizeAffectedUserAssessment, data.assessment);
+    return mutate(async () => ({ affectedUserAssessment: assessment, potentiallyAffectedAccountCount: assessment.potentiallyAffectedCount, knownAffectedAccountCount: assessment.confirmedAffectedCount }));
+  }
+  if (action === "setHbnrAssessment") {
+    const assessment = normalized(normalizeHbnrAssessment, data.assessment);
+    return mutate(async () => ({ hbnrAssessment: assessment }));
+  }
+  if (action === "requestCounselReview") return mutate(async (previous) => ({ status: assertTransition(previous.status, "COUNSEL_REVIEW"), legalReviewStatus: "PENDING_COUNSEL", counselReviewRequired: true, counsel: { ...(previous.counsel || {}), counselReviewRequired: true, counselReviewStatus: "PENDING_COUNSEL", counselReviewRequestedAt: Timestamp.now() } }));
+  if (action === "recordCounselDecision") {
+    const decision = normalized(normalizeCounselDecision, data.decision, { recordedAt: Timestamp.now(), recordedBy: actorUid });
+    return mutate(async (previous) => {
+      if (previous.status !== "COUNSEL_REVIEW") throw new HttpsError("failed-precondition", "Counsel decisions may be recorded only during counsel review.");
+      return { legalReviewStatus: decision.counselReviewStatus, counsel: { ...(previous.counsel || {}), ...decision } };
+    });
+  }
+  if (action === "recordNotificationDecision") {
+    const decision = normalized(normalizeNotificationDecision, data.decision, { recordedAt: Timestamp.now(), recordedBy: actorUid });
+    return mutate(async (previous) => {
+      if (previous.counsel?.counselReviewStatus !== "COUNSEL_REVIEWED") throw new HttpsError("failed-precondition", "Human counsel review must be recorded first.");
+      return { status: assertTransition(previous.status, "NOTIFICATION_DECISION"), notificationDecisionStatus: decision.notificationDecisionStatus, notificationDecisionReason: decision.decisionBasisReference, notificationDecision: decision };
+    });
+  }
+  if (action === "setPostIncidentReview") {
+    const review = normalized(normalizePostIncidentReview, data.review, { completedAt: Timestamp.now() });
+    return mutate(async (previous) => {
+      if (!["NOTIFICATION_DECISION", "REMEDIATION"].includes(previous.status)) throw new HttpsError("failed-precondition", "Post-incident review is available only after notification decision.");
+      return { postIncidentReview: review };
+    });
+  }
+  if (action === "close") return mutate(async (previous) => {
+    const closureSummary = normalized(assertClosable, previous, data.closureSummary);
+    const review = normalized(normalizePostIncidentReview, data.postIncidentReview || {}, { completedAt: Timestamp.now() });
+    return { status: assertTransition(previous.status, "CLOSED"), closureSummary, closedAt: Timestamp.now(), postIncidentReview: review };
+  });
+  throw new HttpsError("invalid-argument", "Unsupported incident operation.");
+});
 function requireRecentAccountAuth(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to manage your account.");
   const authTime = Number(request.auth.token.auth_time || 0) * 1000;
