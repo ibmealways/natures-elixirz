@@ -5,14 +5,23 @@ export const INCIDENT_SEVERITIES = Object.freeze(["SEV0", "SEV1", "SEV2", "SEV3"
 export const LEGAL_REVIEW_STATUSES = Object.freeze(["PENDING_COUNSEL", "COUNSEL_REVIEWED"]);
 export const NOTIFICATION_DECISION_STATUSES = Object.freeze(["PENDING_COUNSEL", "NOTIFICATION_REQUIRED", "NOTIFICATION_NOT_REQUIRED"]);
 export const CONTAINMENT_CHECKLIST = Object.freeze(["revoke-compromised-credentials", "disable-affected-integration", "disable-affected-administrative-access", "isolate-affected-function", "review-firestore-rule-exposure", "review-storage-exposure", "review-openai-transmission", "review-household-authorization", "review-astra-authorization", "review-exported-downloaded-information", "preserve-logs-before-configuration-changes", "contact-vendor-security-team", "escalate-to-counsel"]);
-export const INCIDENT_ACTIONS = Object.freeze(["create", "list", "get", "update", "transition", "addTimeline", "addContainment", "addEvidence", "addTechnicalFinding", "setAffectedAssessment", "setHbnrAssessment", "requestCounselReview", "recordCounselDecision", "recordNotificationDecision", "setPostIncidentReview", "close"]);
-export const INCIDENT_LIMITS = Object.freeze({ incidentsPerAdminPerDay: 100, timeline: 100, containment: CONTAINMENT_CHECKLIST.length, evidence: 50, findings: 50, auditsReturned: 500 });
+export const INCIDENT_ACTIONS = Object.freeze(["create", "list", "get", "update", "transition", "setTriage", "createTask", "updateTask", "addAffectedSystem", "updateAffectedSystem", "addTimeline", "addContainment", "addEvidence", "addTechnicalFinding", "addDeadline", "updateDeadline", "recordReviewCheckpoint", "setAffectedAssessment", "setHbnrAssessment", "requestCounselReview", "recordCounselDecision", "recordNotificationDecision", "setPostIncidentReview", "close"]);
+export const INCIDENT_LIMITS = Object.freeze({ incidentsPerAdminPerDay: 100, timeline: 100, containment: CONTAINMENT_CHECKLIST.length, evidence: 50, findings: 50, tasks: 50, affectedSystems: 20, deadlines: 30, reviews: 7, auditsReturned: 500 });
+export const TASK_CATEGORIES = Object.freeze(["TRIAGE", "INVESTIGATION", "EVIDENCE", "CONTAINMENT_TRACKING", "RECOVERY_TRACKING", "COUNSEL_REVIEW", "NOTIFICATION_DECISION", "DOCUMENTATION", "POST_INCIDENT"]);
+export const TASK_STATUSES = Object.freeze(["OPEN", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELLED"]);
+export const SYSTEM_CATEGORIES = Object.freeze(["FIREBASE_AUTH", "FIRESTORE", "CLOUD_FUNCTIONS", "HOSTING", "STRIPE_INTEGRATION", "EMAIL_PROVIDER", "AI_PROVIDER", "APPLICATION_FRONTEND", "ADMINISTRATIVE_CONSOLE", "OTHER"]);
+export const SYSTEM_STATUSES = Object.freeze(["SUSPECTED", "UNDER_REVIEW", "CONFIRMED_AFFECTED", "CONFIRMED_NOT_AFFECTED"]);
+export const DEADLINE_SOURCES = Object.freeze(["INTERNAL_POLICY", "COUNSEL_PROVIDED", "ADMIN_ENTERED", "OTHER"]);
+export const DEADLINE_STATUSES = Object.freeze(["OPEN", "COMPLETE", "CANCELLED"]);
+export const REVIEW_TYPES = Object.freeze(["TECHNICAL_INVESTIGATION", "AFFECTED_USER_ESTIMATE", "COUNSEL", "NOTIFICATION_DECISION", "CONTAINMENT_PLAN", "RECOVERY", "CLOSURE"]);
+export const REVIEW_STATUSES = Object.freeze(["PENDING", "REQUESTED", "REVIEWED", "NOT_APPLICABLE"]);
 export const INCIDENT_TRANSITIONS = Object.freeze({
   REPORTED: ["TRIAGE"], TRIAGE: ["CONTAINMENT", "INVESTIGATION"], CONTAINMENT: ["INVESTIGATION", "EVIDENCE_PRESERVATION"],
   INVESTIGATION: ["EVIDENCE_PRESERVATION", "TECHNICAL_ASSESSMENT"], EVIDENCE_PRESERVATION: ["TECHNICAL_ASSESSMENT"],
   TECHNICAL_ASSESSMENT: ["COUNSEL_REVIEW"], COUNSEL_REVIEW: ["NOTIFICATION_DECISION"],
   NOTIFICATION_DECISION: ["REMEDIATION", "CLOSED"], REMEDIATION: ["CLOSED"], CLOSED: [],
 });
+export const INCIDENT_RECORD_TYPES = Object.freeze({ TIMELINE: "TIMELINE_EVENT", EVIDENCE: "EVIDENCE_REFERENCE", FINDING: "TECHNICAL_FINDING" });
 export const HBNR_DISCLAIMER = "THIS TOOL DOES NOT DETERMINE WHETHER AN EVENT IS A LEGALLY REPORTABLE BREACH. FINAL DETERMINATION REQUIRES AUTHORIZED HUMAN AND, WHERE APPROPRIATE, LEGAL COUNSEL REVIEW.";
 
 const own = (value) => Object.prototype.toString.call(value) === "[object Object]" && Object.getPrototypeOf(value) === Object.prototype;
@@ -84,6 +93,53 @@ export function assertTransition(from, to) {
 }
 export function assertIncidentMutable(incident) { if (incident?.status === "CLOSED") throw new Error("Closed incidents are immutable."); }
 export function boundedAppend(values, item, limit, name) { const current = Array.isArray(values) ? values : []; if (current.length >= limit) throw new Error(`${name} limit reached.`); return [...current, item]; }
+function replaceById(values, idField, id, item, name) {
+  const current = Array.isArray(values) ? values : [];
+  if (!current.some((value) => value?.[idField] === id)) throw new Error(`${name} was not found.`);
+  return current.map((value) => value?.[idField] === id ? item : value);
+}
+export function normalizeTriage(value) {
+  const input = object(value, "Triage", ["discoverySource", "discoveredAt", "initialScope", "affectedSystemCategories", "suspectedDataCategories", "estimatedAffectedUserRange", "operationalSeverity", "investigationOwner", "responseOwner", "notes", "nextReviewAt"]);
+  return { discoverySource: string(input.discoverySource, "Discovery source", 160), discoveredAt: dateText(input.discoveredAt, "Discovery timestamp"), initialScope: string(input.initialScope, "Initial scope", 1500), affectedSystemCategories: strings(input.affectedSystemCategories, "Affected system categories", 20, 80), suspectedDataCategories: strings(input.suspectedDataCategories, "Suspected data categories", 20, 80), estimatedAffectedUserRange: string(input.estimatedAffectedUserRange, "Estimated affected-user range", 80), operationalSeverity: choice(input.operationalSeverity || "SEV0", "Operational severity", INCIDENT_SEVERITIES), investigationOwner: string(input.investigationOwner, "Investigation owner", 128), responseOwner: string(input.responseOwner, "Response owner", 128), notes: string(input.notes, "Triage notes", 2000), nextReviewAt: dateText(input.nextReviewAt, "Next review timestamp") };
+}
+export function normalizeTask(value, authority = {}) {
+  const input = object(value, "Task", ["taskId", "title", "category", "status", "priority", "assignedTo", "dueAt", "notes"]);
+  return { taskId: authority.taskId || assertMutationId(input.taskId), title: string(input.title, "Task title", 160, { required: true }), category: choice(input.category, "Task category", TASK_CATEGORIES), status: choice(input.status || "OPEN", "Task status", TASK_STATUSES), priority: choice(input.priority || "NORMAL", "Task priority", ["LOW", "NORMAL", "HIGH", "URGENT"]), assignedTo: string(input.assignedTo, "Task assignee", 128), createdAt: authority.createdAt, createdBy: authority.createdBy, dueAt: dateText(input.dueAt, "Task due timestamp"), completedAt: input.status === "COMPLETE" ? authority.completedAt : null, completedBy: input.status === "COMPLETE" ? authority.completedBy : null, notes: string(input.notes, "Task notes", 1000) };
+}
+export function replaceTask(values, value, authority = {}) {
+  const prior = (Array.isArray(values) ? values : []).find((item) => item?.taskId === value?.taskId);
+  if (!prior) throw new Error("Task was not found.");
+  const task = normalizeTask(value, { taskId: prior.taskId, createdAt: prior.createdAt, createdBy: prior.createdBy, completedAt: authority.completedAt, completedBy: authority.completedBy });
+  return replaceById(values, "taskId", task.taskId, task, "Task");
+}
+export function normalizeAffectedSystem(value, authority = {}) {
+  const input = object(value, "Affected system", ["systemId", "category", "label", "status", "notes"]);
+  return { systemId: authority.systemId || assertMutationId(input.systemId), category: choice(input.category, "System category", SYSTEM_CATEGORIES), label: string(input.label, "System label", 120, { required: true }), status: choice(input.status || "SUSPECTED", "System status", SYSTEM_STATUSES), notes: string(input.notes, "System notes", 1000), recordedAt: authority.recordedAt, recordedBy: authority.recordedBy };
+}
+export function replaceAffectedSystem(values, value) {
+  const prior = (Array.isArray(values) ? values : []).find((item) => item?.systemId === value?.systemId);
+  if (!prior) throw new Error("Affected system was not found.");
+  return replaceById(values, "systemId", prior.systemId, normalizeAffectedSystem(value, { systemId: prior.systemId, recordedAt: prior.recordedAt, recordedBy: prior.recordedBy }), "Affected system");
+}
+export function normalizeDeadline(value, authority = {}) {
+  const input = object(value, "Deadline", ["deadlineId", "type", "dueAt", "source", "owner", "status", "notes"]);
+  return { deadlineId: authority.deadlineId || assertMutationId(input.deadlineId), type: string(input.type, "Deadline type", 120, { required: true }), dueAt: dateText(input.dueAt, "Deadline timestamp"), source: choice(input.source, "Deadline source", DEADLINE_SOURCES), owner: string(input.owner, "Deadline owner", 128), status: choice(input.status || "OPEN", "Deadline status", DEADLINE_STATUSES), notes: string(input.notes, "Deadline notes", 1000), recordedAt: authority.recordedAt, recordedBy: authority.recordedBy };
+}
+export function replaceDeadline(values, value) {
+  const prior = (Array.isArray(values) ? values : []).find((item) => item?.deadlineId === value?.deadlineId);
+  if (!prior) throw new Error("Deadline was not found.");
+  return replaceById(values, "deadlineId", prior.deadlineId, normalizeDeadline(value, { deadlineId: prior.deadlineId, recordedAt: prior.recordedAt, recordedBy: prior.recordedBy }), "Deadline");
+}
+export function normalizeReviewCheckpoint(value, authority = {}) {
+  const input = object(value, "Review checkpoint", ["type", "status", "reviewerIdentity", "notes"]);
+  return { type: choice(input.type, "Review type", REVIEW_TYPES), status: choice(input.status || "PENDING", "Review status", REVIEW_STATUSES), reviewerIdentity: string(input.reviewerIdentity, "Reviewer identity", 160), notes: string(input.notes, "Review notes", 1000), recordedAt: authority.recordedAt, recordedBy: authority.recordedBy };
+}
+export function upsertReviewCheckpoint(values, checkpoint) {
+  const current = Array.isArray(values) ? values : [];
+  const without = current.filter((item) => item?.type !== checkpoint.type);
+  if (without.length === current.length && current.length >= INCIDENT_LIMITS.reviews) throw new Error("Review checkpoint limit reached.");
+  return [...without, checkpoint];
+}
 
 export function defaultAffectedUserAssessment() { return { potentiallyAffectedCount: 0, confirmedAffectedCount: 0, affectedDataCategories: [], affectedSystems: [], exposureStart: null, exposureEnd: null, accessMechanism: null, exportPossible: false, downloadPossible: false, vendorDisclosurePossible: false, householdPropagationPossible: false, affectedJurisdictions: [], identificationConfidence: "UNKNOWN", assessmentNotes: null }; }
 export function defaultHbnrAssessment() { return { healthWellnessInformationInvolved: "UNKNOWN", potentiallyIdentifiable: "UNKNOWN", accessOrDisclosureAuthorized: "UNKNOWN", acquisitionTechnicallyPossible: "UNKNOWN", encryptedOrProtected: "UNKNOWN", systems: [], vendors: [], potentiallyAffectedCount: 0, jurisdictions: [], discoveredAt: null, evidencePreserved: "UNKNOWN", disclaimer: HBNR_DISCLAIMER }; }
@@ -94,7 +150,7 @@ export function defaultPostIncidentReview() { return { rootCauseCategory: null, 
 export function normalizeIncidentCreate(value) {
   const input = object(value, "Incident", ["title", "summary", "severity", "incidentType", "discoveredAt", "assignedOwnerUid", "affectedSystems", "potentialDataCategories", "potentiallyAffectedAccountCount", "externalVendorsPotentiallyInvolved"]);
   const severity = input.severity == null ? "SEV0" : choice(input.severity, "Severity", INCIDENT_SEVERITIES);
-  return { status: "REPORTED", severity, incidentType: string(input.incidentType || "suspected-privacy-security-event", "Incident type", 100, { required: true }), title: string(input.title, "Title", 160, { required: true }), summary: string(input.summary, "Summary", 2000, { required: true }), discoveredAt: dateText(input.discoveredAt, "Discovered at"), assignedOwnerUid: string(input.assignedOwnerUid, "Owner UID", 128), affectedSystems: strings(input.affectedSystems, "Affected systems"), potentialDataCategories: strings(input.potentialDataCategories, "Potential data categories"), potentiallyAffectedAccountCount: integer(input.potentiallyAffectedAccountCount, "Potentially affected count"), knownAffectedAccountCount: 0, containmentStatus: "NOT_STARTED", containmentActions: [], evidencePreservationStatus: "NOT_STARTED", evidenceReferences: [], timeline: [], technicalFindings: [], externalVendorsPotentiallyInvolved: strings(input.externalVendorsPotentiallyInvolved, "Potential vendors"), legalReviewStatus: "NOT_REVIEWED", counselReviewRequired: false, notificationDecisionStatus: "NOT_EVALUATED", notificationDecisionReason: null, closureSummary: null, closedAt: null, postIncidentReviewRequired: true, affectedUserAssessment: defaultAffectedUserAssessment(), hbnrAssessment: defaultHbnrAssessment(), counsel: defaultCounselState(), notificationDecision: defaultNotificationDecision(), postIncidentReview: defaultPostIncidentReview() };
+  return { status: "REPORTED", severity, incidentType: string(input.incidentType || "suspected-privacy-security-event", "Incident type", 100, { required: true }), title: string(input.title, "Title", 160, { required: true }), summary: string(input.summary, "Summary", 2000, { required: true }), discoveredAt: dateText(input.discoveredAt, "Discovered at"), assignedOwnerUid: string(input.assignedOwnerUid, "Owner UID", 128), affectedSystems: strings(input.affectedSystems, "Affected systems"), potentialDataCategories: strings(input.potentialDataCategories, "Potential data categories"), potentiallyAffectedAccountCount: integer(input.potentiallyAffectedAccountCount, "Potentially affected count"), knownAffectedAccountCount: 0, triage: null, responseTasks: [], affectedSystemRecords: [], operationalDeadlines: [], reviewCheckpoints: [], containmentStatus: "NOT_STARTED", containmentActions: [], evidencePreservationStatus: "NOT_STARTED", evidenceReferences: [], timeline: [], technicalFindings: [], externalVendorsPotentiallyInvolved: strings(input.externalVendorsPotentiallyInvolved, "Potential vendors"), legalReviewStatus: "NOT_REVIEWED", counselReviewRequired: false, notificationDecisionStatus: "NOT_EVALUATED", notificationDecisionReason: null, closureSummary: null, closedAt: null, postIncidentReviewRequired: true, affectedUserAssessment: defaultAffectedUserAssessment(), hbnrAssessment: defaultHbnrAssessment(), counsel: defaultCounselState(), notificationDecision: defaultNotificationDecision(), postIncidentReview: defaultPostIncidentReview() };
 }
 export function normalizeIncidentUpdate(value) {
   const input = object(value, "Incident update", ["title", "summary", "severity", "incidentType", "assignedOwnerUid", "affectedSystems", "potentialDataCategories", "externalVendorsPotentiallyInvolved"]);
@@ -107,7 +163,7 @@ export function normalizeIncidentUpdate(value) {
 }
 export function normalizeTimelineEvent(value, authority = {}) {
   const input = object(value, "Timeline event", ["eventType", "description", "sourceReference"]);
-  return { eventType: string(input.eventType, "Event type", 80, { required: true, pattern: /^[A-Z0-9_:-]+$/ }), description: string(input.description, "Description", 1000, { required: true }), sourceReference: string(input.sourceReference, "Source reference", 500), actorUid: authority.actorUid, timestamp: authority.timestamp };
+  return { eventType: choice(string(input.eventType, "Event type", 80, { required: true, pattern: /^[A-Z0-9_:-]+$/ }), "Event type", [INCIDENT_RECORD_TYPES.TIMELINE]), description: string(input.description, "Description", 1000, { required: true }), sourceReference: string(input.sourceReference, "Source reference", 500), actorUid: authority.actorUid, timestamp: authority.timestamp };
 }
 export function normalizeContainmentAction(value, authority = {}) {
   const input = object(value, "Containment item", ["checklistId", "status", "notes"]);
@@ -115,11 +171,11 @@ export function normalizeContainmentAction(value, authority = {}) {
 }
 export function normalizeEvidenceReference(value, authority = {}) {
   const input = object(value, "Evidence reference", ["evidenceType", "sourceSystem", "description", "dateRange", "storageReference", "integrityNotes", "containsSensitiveData", "accessRestrictions", "retentionReviewRequired"]);
-  return { evidenceId: authority.evidenceId, evidenceType: string(input.evidenceType, "Evidence type", 100, { required: true }), sourceSystem: string(input.sourceSystem, "Source system", 120, { required: true }), description: string(input.description, "Evidence description", 1000, { required: true }), dateRange: string(input.dateRange, "Date range", 200), preservedAt: authority.preservedAt, preservedByUid: authority.preservedByUid, storageReference: string(input.storageReference, "Storage reference", 500), integrityNotes: string(input.integrityNotes, "Integrity notes", 1000), containsSensitiveData: input.containsSensitiveData == null ? false : boolean(input.containsSensitiveData, "Sensitive-data flag"), accessRestrictions: string(input.accessRestrictions, "Access restrictions", 500), retentionReviewRequired: input.retentionReviewRequired == null ? true : boolean(input.retentionReviewRequired, "Retention-review flag") };
+  return { evidenceId: authority.evidenceId, evidenceType: choice(string(input.evidenceType, "Evidence type", 100, { required: true }), "Evidence type", [INCIDENT_RECORD_TYPES.EVIDENCE]), sourceSystem: string(input.sourceSystem, "Source system", 120, { required: true }), description: string(input.description, "Evidence description", 1000, { required: true }), dateRange: string(input.dateRange, "Date range", 200), preservedAt: authority.preservedAt, preservedByUid: authority.preservedByUid, storageReference: string(input.storageReference, "Storage reference", 500), integrityNotes: string(input.integrityNotes, "Integrity notes", 1000), containsSensitiveData: input.containsSensitiveData == null ? false : boolean(input.containsSensitiveData, "Sensitive-data flag"), accessRestrictions: string(input.accessRestrictions, "Access restrictions", 500), retentionReviewRequired: input.retentionReviewRequired == null ? true : boolean(input.retentionReviewRequired, "Retention-review flag") };
 }
 export function normalizeTechnicalFinding(value, authority = {}) {
   const input = object(value, "Technical finding", ["findingType", "summary", "sourceReference"]);
-  return { findingType: string(input.findingType, "Finding type", 100, { required: true }), summary: string(input.summary, "Finding summary", 1500, { required: true }), sourceReference: string(input.sourceReference, "Source reference", 500), recordedAt: authority.recordedAt, recordedByUid: authority.recordedByUid };
+  return { findingType: choice(string(input.findingType, "Finding type", 100, { required: true }), "Finding type", [INCIDENT_RECORD_TYPES.FINDING]), summary: string(input.summary, "Finding summary", 1500, { required: true }), sourceReference: string(input.sourceReference, "Source reference", 500), recordedAt: authority.recordedAt, recordedByUid: authority.recordedByUid };
 }
 export function normalizeAffectedUserAssessment(value) {
   const input = object(value, "Affected-user assessment", ["potentiallyAffectedCount", "confirmedAffectedCount", "affectedDataCategories", "affectedSystems", "exposureStart", "exposureEnd", "accessMechanism", "exportPossible", "downloadPossible", "vendorDisclosurePossible", "householdPropagationPossible", "affectedJurisdictions", "identificationConfidence", "assessmentNotes"]);

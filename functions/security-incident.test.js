@@ -19,17 +19,27 @@ import {
   HBNR_DISCLAIMER,
   incidentIdForMutation,
   INCIDENT_STATUSES,
+  INCIDENT_RECORD_TYPES,
   INCIDENT_TRANSITIONS,
   mutationFingerprint,
   normalizeAffectedUserAssessment,
+  normalizeAffectedSystem,
   normalizeContainmentAction,
+  normalizeDeadline,
   normalizeEvidenceReference,
   normalizeHbnrAssessment,
   normalizeIncidentCreate,
   normalizeIncidentUpdate,
   normalizeNotificationDecision,
   normalizePostIncidentReview,
+  normalizeReviewCheckpoint,
+  normalizeTask,
   normalizeTimelineEvent,
+  normalizeTriage,
+  replaceAffectedSystem,
+  replaceDeadline,
+  replaceTask,
+  upsertReviewCheckpoint,
 } from "./security-incident.js";
 
 const validMutationId = "mutation_1234567890";
@@ -141,17 +151,19 @@ test("bounded collections reject growth beyond their limit", () => {
   assert.throws(() => normalizePostIncidentReview({ correctiveActions: Array(21).fill("action") }), /at most 20/);
 });
 test("evidence stores references and metadata but not payloads", () => {
-  const item = normalizeEvidenceReference({ evidenceType: "cloud-log-export", sourceSystem: "Google Cloud", description: "Synthetic log range", storageReference: "restricted/reference-1", containsSensitiveData: true });
+  const item = normalizeEvidenceReference({ evidenceType: INCIDENT_RECORD_TYPES.EVIDENCE, sourceSystem: "Google Cloud", description: "Synthetic log range", storageReference: "restricted/reference-1", containsSensitiveData: true });
   assert.equal(item.containsSensitiveData, true);
   assert.equal(item.retentionReviewRequired, true);
   assert.equal("payload" in item, false);
   assert.throws(() => normalizeEvidenceReference({ evidenceType: "log", sourceSystem: "cloud", description: "test", payload: "raw evidence" }), /unsupported fields/);
 });
 test("server authority replaces client actor and timestamp fields", () => {
-  const event = normalizeTimelineEvent({ eventType: "SYNTHETIC_EVENT", description: "test" }, { actorUid: "server-actor", timestamp: "server-time" });
+  const event = normalizeTimelineEvent({ eventType: INCIDENT_RECORD_TYPES.TIMELINE, description: "test" }, { actorUid: "server-actor", timestamp: "server-time" });
   assert.equal(event.actorUid, "server-actor");
   assert.equal(event.timestamp, "server-time");
   assert.throws(() => normalizeTimelineEvent({ eventType: "TEST", description: "test", actorUid: "forged" }), /unsupported fields/);
+  assert.throws(() => normalizeTimelineEvent({ eventType: "UNSUPPORTED_EVENT", description: "test" }), /unsupported value/);
+  assert.throws(() => normalizeTimelineEvent({ eventType: "x".repeat(81), description: "test" }), /exceeds/);
 });
 test("containment is a fixed, record-only checklist", () => {
   const item = normalizeContainmentAction({ checklistId: "revoke-compromised-credentials", status: "IN_PROGRESS" }, { recordedByUid: "server-actor", recordedAt: "server-time" });
@@ -169,6 +181,40 @@ test("changed audit categories are deterministic and actions are allowlisted", (
   assert.deepEqual(changedFieldCategories({ status: "REPORTED", severity: "SEV0" }, { status: "TRIAGE", severity: "SEV0" }), ["status"]);
   assert.equal(assertIncidentAction("addTimeline"), "addTimeline");
   assert.throws(() => assertIncidentAction("notifyFTC"), /unsupported value/);
+});
+
+test("Phase II-B triage is bounded and rejects mass assignment", () => {
+  const triage = normalizeTriage({ discoverySource: "Administrator report", initialScope: "Authentication workflow under review", operationalSeverity: "SEV2", nextReviewAt: "2026-08-29T12:00:00Z" });
+  assert.equal(triage.operationalSeverity, "SEV2");
+  assert.throws(() => normalizeTriage({ notes: "x".repeat(2001) }), /exceeds/);
+  assert.throws(() => normalizeTriage({ legalDeadline: "automatic" }), /unsupported fields/);
+});
+test("Phase II-B tasks are bounded, allowlisted, and server attributed", () => {
+  const task = normalizeTask({ title: "Review synthetic logs", category: "INVESTIGATION", status: "OPEN", assignedTo: "admin-a" }, { taskId: validMutationId, createdAt: "server-time", createdBy: "server-actor" });
+  assert.equal(task.createdBy, "server-actor");
+  assert.throws(() => normalizeTask({ title: "x", category: "EXECUTE_CONTAINMENT" }, { taskId: validMutationId }), /unsupported value/);
+  assert.throws(() => normalizeTask({ title: "x", category: "TRIAGE", createdBy: "forged" }, { taskId: validMutationId }), /unsupported fields/);
+  const completed = replaceTask([task], { taskId: validMutationId, title: task.title, category: task.category, status: "COMPLETE" }, { completedAt: "server-complete", completedBy: "server-actor" });
+  assert.equal(completed[0].completedBy, "server-actor");
+  assert.throws(() => boundedAppend(Array(50).fill(task), task, 50, "Response task"), /limit reached/);
+});
+test("Phase II-B affected systems record human conclusions without asserting compromise", () => {
+  const system = normalizeAffectedSystem({ category: "FIRESTORE", label: "Primary database", status: "SUSPECTED" }, { systemId: validMutationId, recordedAt: "server-time", recordedBy: "server-actor" });
+  assert.equal(system.status, "SUSPECTED");
+  assert.throws(() => normalizeAffectedSystem({ category: "FIRESTORE", label: "x", status: "COMPROMISED" }, { systemId: validMutationId }), /unsupported value/);
+  assert.equal(replaceAffectedSystem([system], { systemId: system.systemId, category: system.category, label: system.label, status: "CONFIRMED_NOT_AFFECTED", notes: system.notes })[0].status, "CONFIRMED_NOT_AFFECTED");
+});
+test("Phase II-B deadlines require human-entered sources and valid dates", () => {
+  const deadline = normalizeDeadline({ type: "Internal review", dueAt: "2026-08-30T12:00:00Z", source: "ADMIN_ENTERED", status: "OPEN" }, { deadlineId: validMutationId, recordedAt: "server-time", recordedBy: "server-actor" });
+  assert.equal(deadline.source, "ADMIN_ENTERED");
+  assert.throws(() => normalizeDeadline({ type: "Legal notice", dueAt: "tomorrowish", source: "SYSTEM_LEGAL_CALCULATION" }, { deadlineId: validMutationId }), /timestamp|unsupported value/);
+  assert.equal(replaceDeadline([deadline], { deadlineId: deadline.deadlineId, type: deadline.type, dueAt: deadline.dueAt, source: deadline.source, owner: deadline.owner, status: "COMPLETE", notes: deadline.notes })[0].status, "COMPLETE");
+});
+test("Phase II-B review checkpoints are fixed, bounded, and human attributed", () => {
+  const checkpoint = normalizeReviewCheckpoint({ type: "TECHNICAL_INVESTIGATION", status: "REVIEWED", reviewerIdentity: "Internal administrator" }, { recordedAt: "server-time", recordedBy: "server-actor" });
+  assert.equal(upsertReviewCheckpoint([], checkpoint)[0].recordedBy, "server-actor");
+  assert.equal(upsertReviewCheckpoint([checkpoint], { ...checkpoint, status: "PENDING" }).length, 1);
+  assert.throws(() => normalizeReviewCheckpoint({ type: "AUTOMATED_LEGAL_REVIEW", status: "REVIEWED" }), /unsupported value/);
 });
 
 test("callable source enforces atomic incident and append-only audit creation", () => {
@@ -189,6 +235,22 @@ test("Phase II-A callable has no notification, containment execution, or externa
   const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   const phase = source.slice(source.indexOf("async function mutateSecurityIncident"), source.indexOf("function requireRecentAccountAuth"));
   assert.doesNotMatch(phase, /sendBetaTesterUpdate|collection\(["']mail["']\)|new Stripe|fetch\s*\(|subscriptions\.|auth\(\)\.revoke|deleteSubscriberAccount/);
+});
+test("Phase II-B actions reuse atomic audit, version, and idempotency boundaries", () => {
+  const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const phase = source.slice(source.indexOf("async function mutateSecurityIncident"), source.indexOf("function requireRecentAccountAuth"));
+  for (const action of ["setTriage", "createTask", "updateTask", "addAffectedSystem", "updateAffectedSystem", "addDeadline", "updateDeadline", "recordReviewCheckpoint"]) assert.match(phase, new RegExp(action));
+  assert.match(phase, /expectedVersion/);
+  assert.match(phase, /mutationId/);
+  assert.match(phase, /transaction\.create\(auditRef/);
+  assert.doesNotMatch(phase, /collection\(["']mail["']\)|sendBetaTesterUpdate|new Stripe|fetch\s*\(|auth\(\)\.revoke/);
+});
+test("Phase II-B UI exposes operational sections without autonomous action controls", () => {
+  const ui = readFileSync(new URL("../src/components/SecurityIncidentRegister.jsx", import.meta.url), "utf8");
+  for (const label of ["Triage workspace", "Response task", "Affected system", "Human-entered deadline", "Human review checkpoint", "Evidence reference"]) assert.match(ui, new RegExp(label));
+  for (const action of ["setTriage", "createTask", "updateTask", "addAffectedSystem", "updateAffectedSystem", "addDeadline", "updateDeadline", "recordReviewCheckpoint"]) assert.match(ui, new RegExp(action));
+  assert.doesNotMatch(ui, /notify consumer|notify FTC|send notice|execute containment|revoke credentials/i);
+  assert.doesNotMatch(ui, /dangerouslySetInnerHTML|\.innerHTML\s*=/);
 });
 test("Firestore rules explicitly deny all Phase II-A server collections", () => {
   const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
