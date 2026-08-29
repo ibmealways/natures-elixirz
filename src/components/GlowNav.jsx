@@ -1,9 +1,10 @@
 import React from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Apple, Carrot, Cherry, Citrus, Droplets, Languages, LogIn, LogOut, Sparkles, Sprout, UserCircle } from "lucide-react";
 import "./GlowNav.css";
 import { languages, useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
+import { accountAccessPath, BETA_ADMIN_RETURN_PATH } from "../utilities/authReturnPath";
 
 const links = [
   ["/smoothie", "smoothies"], ["/astra", "astra"], ["/saved", "saved"],
@@ -24,12 +25,14 @@ const ingredientOrbits = [
 export default function GlowNav() {
   const { language, setLanguage, t } = useLanguage();
   const { user, loading, signOut } = useAuth();
+  const location = useLocation();
+  const signInPath = accountAccessPath(location.pathname === BETA_ADMIN_RETURN_PATH ? BETA_ADMIN_RETURN_PATH : null);
   return (
     <header className="glow-nav-container">
       <div className="glow-nav-stack">
         <div className="glow-nav-utility">
           <div className="account-utility">
-            {loading ? <span><UserCircle size={16} /> Loading account…</span> : user ? <><span title={user.email}><UserCircle size={16} /> {user.email}</span><button type="button" onClick={signOut}><LogOut size={15} /> {t("signOut")}</button></> : <Link to="/account#account-access"><LogIn size={16} /> {t("signIn")}</Link>}
+            {loading ? <span><UserCircle size={16} /> Loading account…</span> : user ? <><span title={user.email}><UserCircle size={16} /> {user.email}</span><button type="button" onClick={signOut}><LogOut size={15} /> {t("signOut")}</button></> : <Link to={signInPath}><LogIn size={16} /> {t("signIn")}</Link>}
           </div>
           <label className="language-selector"><Languages size={15} /><span>{t("language")}</span><select aria-label={t("language")} value={language} onChange={(event) => setLanguage(event.target.value)}>{languages.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label>
         </div>

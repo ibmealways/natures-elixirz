@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { useLocation, useNavigate } from "react-router-dom";
 import { auth, isFirebaseConfigured } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { requestVipFamilyAccess } from "../utilities/vipFamily";
+import { safeAuthReturnPath } from "../utilities/authReturnPath";
 
 export default function AuthForm() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const returnPath = safeAuthReturnPath(location.search);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -28,6 +33,7 @@ export default function AuthForm() {
         }
       } else {
         await signInWithEmailAndPassword(auth, email, password);
+        if (returnPath) navigate(returnPath, { replace: true });
         setMessage("Signed in.");
       }
     } catch {
