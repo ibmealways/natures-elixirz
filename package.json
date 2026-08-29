@@ -23,6 +23,8 @@
     "test:watch": "vitest",
     "test:functions": "npm --prefix functions test",
     "test:firestore-rules": "node tests/run-firestore-rules-tests.cjs",
+    "acceptance:phase2b:bootstrap": "node scripts/bootstrap-phase2b-emulator-admin.cjs",
+    "dev:acceptance": "vite --mode acceptance",
     "verify": "npm test && npm run test:functions && npm run test:firestore-rules && npm run build",
     "audit:launch": "node scripts/audit-launch-gates.cjs",
     "deploy:public": "npm run build && firebase deploy --only firestore,hosting",
