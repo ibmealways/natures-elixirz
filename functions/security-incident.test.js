@@ -258,3 +258,28 @@ test("Firestore rules explicitly deny all Phase II-A server collections", () => 
     assert.match(rules, new RegExp(`match /${collection}/\\{[^}]+\\} \\{[\\s\\S]*?allow read, write: if false;`));
   }
 });
+
+test("notification decisions remain counsel-gated and enter the canonical workflow without side effects", () => {
+  const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const action = source.slice(source.indexOf('if (action === "recordNotificationDecision")'), source.indexOf('if (action === "setPostIncidentReview")'));
+  const pending = normalizeNotificationDecision({ notificationDecisionStatus: "PENDING_COUNSEL" }, { recordedAt: "server-time", recordedBy: "server-actor" });
+  assert.equal(pending.notificationDecisionStatus, "PENDING_COUNSEL");
+  assert.equal(pending.consumerNoticeRequired, null);
+  assert.equal(pending.ftcNoticeRequired, null);
+  assert.equal(pending.mediaNoticeRequired, null);
+  assert.equal(pending.stateNoticeReviewRequired, null);
+  assert.match(action, /counselReviewStatus !== "COUNSEL_REVIEWED"/);
+  assert.match(action, /assertTransition\(previous\.status, "NOTIFICATION_DECISION"\)/);
+  assert.doesNotMatch(action, /sendBetaTesterUpdate|collection\(["']mail["']\)|new Stripe|fetch\s*\(|auth\(\)\.revoke|deleteSubscriberAccount/);
+});
+test("protected lifecycle entries retain dedicated backend validation", () => {
+  const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const counsel = source.slice(source.indexOf('if (action === "requestCounselReview")'), source.indexOf('if (action === "recordCounselDecision")'));
+  const notification = source.slice(source.indexOf('if (action === "recordNotificationDecision")'), source.indexOf('if (action === "setPostIncidentReview")'));
+  const close = source.slice(source.indexOf('if (action === "close")'), source.indexOf('export const generateSmartMealPlan'));
+  assert.match(counsel, /assertTransition\(previous\.status, "COUNSEL_REVIEW"\)/);
+  assert.match(counsel, /counselReviewStatus: "PENDING_COUNSEL"/);
+  assert.match(notification, /assertTransition\(previous\.status, "NOTIFICATION_DECISION"\)/);
+  assert.match(close, /assertClosable/);
+  assert.match(close, /assertTransition\(previous\.status, "CLOSED"\)/);
+});
