@@ -20,7 +20,7 @@ import { activeVipFamilyMemberUids, documentData, documentsData, uniqueDocuments
 import { mailFailureAction, retryableMailPayload } from "./mail-autonomy.js";
 import { GoogleAuth } from "google-auth-library";
 import { assessGenerationReliability, backupReadiness, shouldReconcileLedger, shouldRecordAiServiceIncident, summarizeAutonomyHealth } from "./operations-autonomy.js";
-import { assertAllowedFields, assertAuthorizedIncidentAdmin, assertClosable, assertCurrentVersion, assertExpectedVersion, assertIncidentAction, assertIncidentId, assertIncidentMutable, assertMutationId, assertReplayMatches, assertTransition, auditIdForMutation, boundedAppend, changedFieldCategories, incidentIdForMutation, INCIDENT_LIMITS, mutationFingerprint, normalizeAffectedUserAssessment, normalizeContainmentAction, normalizeCounselDecision, normalizeEvidenceReference, normalizeHbnrAssessment, normalizeIncidentCreate, normalizeIncidentUpdate, normalizeNotificationDecision, normalizePostIncidentReview, normalizeReason, normalizeTechnicalFinding, normalizeTimelineEvent } from "./security-incident.js";
+import { assertAllowedFields, assertAuthorizedIncidentAdmin, assertClosable, assertCurrentVersion, assertExpectedVersion, assertIncidentAction, assertIncidentId, assertIncidentMutable, assertMutationId, assertReplayMatches, assertTransition, auditIdForMutation, boundedAppend, changedFieldCategories, incidentIdForMutation, INCIDENT_LIMITS, mutationFingerprint, normalizeAffectedSystem, normalizeAffectedUserAssessment, normalizeContainmentAction, normalizeCounselDecision, normalizeDeadline, normalizeEvidenceReference, normalizeHbnrAssessment, normalizeIncidentCreate, normalizeIncidentUpdate, normalizeNotificationDecision, normalizePostIncidentReview, normalizeReason, normalizeReviewCheckpoint, normalizeTask, normalizeTechnicalFinding, normalizeTimelineEvent, normalizeTriage, replaceAffectedSystem, replaceDeadline, replaceTask, upsertReviewCheckpoint } from "./security-incident.js";
 import {
   ASTRA_SYSTEM_INSTRUCTIONS,
   astraReplySchema,
@@ -653,7 +653,7 @@ export const manageSecurityIncidents = onCall({ invoker: "public", enforceAppChe
     return { incident: incidentResult(incidentSnapshot), audits };
   }
 
-  const payloadKey = { update: "changes", transition: "nextStatus", addTimeline: "event", addContainment: "item", addEvidence: "item", addTechnicalFinding: "finding", setAffectedAssessment: "assessment", setHbnrAssessment: "assessment", recordCounselDecision: "decision", recordNotificationDecision: "decision", setPostIncidentReview: "review", close: "closureSummary" }[action];
+  const payloadKey = { update: "changes", transition: "nextStatus", setTriage: "triage", createTask: "task", updateTask: "task", addAffectedSystem: "system", updateAffectedSystem: "system", addTimeline: "event", addContainment: "item", addEvidence: "item", addTechnicalFinding: "finding", addDeadline: "deadline", updateDeadline: "deadline", recordReviewCheckpoint: "checkpoint", setAffectedAssessment: "assessment", setHbnrAssessment: "assessment", recordCounselDecision: "decision", recordNotificationDecision: "decision", setPostIncidentReview: "review", close: "closureSummary" }[action];
   const allowed = ["action", "incidentId", "mutationId", "expectedVersion", "reason", ...(payloadKey ? [payloadKey] : []), ...(action === "close" ? ["postIncidentReview"] : [])];
   const data = incidentPayload(request, allowed);
   const incidentId = normalized(assertIncidentId, data.incidentId);
@@ -664,6 +664,24 @@ export const manageSecurityIncidents = onCall({ invoker: "public", enforceAppChe
 
   if (action === "update") return mutate(async () => normalized(normalizeIncidentUpdate, data.changes));
   if (action === "transition") return mutate(async (previous) => ({ status: normalized(assertTransition, previous.status, data.nextStatus) }));
+  if (action === "setTriage") {
+    const triage = normalized(normalizeTriage, data.triage);
+    return mutate(async () => ({ triage }));
+  }
+  if (action === "createTask") {
+    const task = normalized(normalizeTask, data.task, { taskId: randomUUID(), createdAt: Timestamp.now(), createdBy: actorUid, completedAt: Timestamp.now(), completedBy: actorUid });
+    return mutate(async (previous) => ({ responseTasks: boundedAppend(previous.responseTasks, task, INCIDENT_LIMITS.tasks, "Response task") }));
+  }
+  if (action === "updateTask") {
+    return mutate(async (previous) => ({ responseTasks: replaceTask(previous.responseTasks, data.task, { completedAt: Timestamp.now(), completedBy: actorUid }) }));
+  }
+  if (action === "addAffectedSystem") {
+    const system = normalized(normalizeAffectedSystem, data.system, { systemId: randomUUID(), recordedAt: Timestamp.now(), recordedBy: actorUid });
+    return mutate(async (previous) => ({ affectedSystemRecords: boundedAppend(previous.affectedSystemRecords, system, INCIDENT_LIMITS.affectedSystems, "Affected system") }));
+  }
+  if (action === "updateAffectedSystem") {
+    return mutate(async (previous) => ({ affectedSystemRecords: replaceAffectedSystem(previous.affectedSystemRecords, data.system) }));
+  }
   if (action === "addTimeline") {
     const event = normalized(normalizeTimelineEvent, data.event, { actorUid, timestamp: Timestamp.now() });
     return mutate(async (previous) => ({ timeline: boundedAppend(previous.timeline, event, INCIDENT_LIMITS.timeline, "Timeline") }));
@@ -684,6 +702,17 @@ export const manageSecurityIncidents = onCall({ invoker: "public", enforceAppChe
   if (action === "addTechnicalFinding") {
     const finding = normalized(normalizeTechnicalFinding, data.finding, { recordedByUid: actorUid, recordedAt: Timestamp.now() });
     return mutate(async (previous) => ({ technicalFindings: boundedAppend(previous.technicalFindings, finding, INCIDENT_LIMITS.findings, "Technical finding") }));
+  }
+  if (action === "addDeadline") {
+    const deadline = normalized(normalizeDeadline, data.deadline, { deadlineId: randomUUID(), recordedAt: Timestamp.now(), recordedBy: actorUid });
+    return mutate(async (previous) => ({ operationalDeadlines: boundedAppend(previous.operationalDeadlines, deadline, INCIDENT_LIMITS.deadlines, "Operational deadline") }));
+  }
+  if (action === "updateDeadline") {
+    return mutate(async (previous) => ({ operationalDeadlines: replaceDeadline(previous.operationalDeadlines, data.deadline) }));
+  }
+  if (action === "recordReviewCheckpoint") {
+    const checkpoint = normalized(normalizeReviewCheckpoint, data.checkpoint, { recordedAt: Timestamp.now(), recordedBy: actorUid });
+    return mutate(async (previous) => ({ reviewCheckpoints: upsertReviewCheckpoint(previous.reviewCheckpoints, checkpoint) }));
   }
   if (action === "setAffectedAssessment") {
     const assessment = normalized(normalizeAffectedUserAssessment, data.assessment);
