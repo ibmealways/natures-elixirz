@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow create, read, update, delete: if owns(userId);
+
+      match /recipes/{recipeId} {
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.ownerId == userId;
+      }
+
+      // Only trusted server code may write paid access.
+      match /private/entitlement {
+        allow read: if owns(userId);
+        allow write: if false;
+      }
+    }
+
+    // Admin incident records are accessible only through server-authorized functions.
+    match /securityIncidents/{incidentId} {
+      allow read, write: if false;
+    }
+
+    // Append-only audit events are also server-only.
+    match /securityIncidentAudit/{auditId} {
+      allow read, write: if false;
+    }
+
+    // Server-owned rate-limit counters must never be client-readable or writable.
+    match /securityIncidentAdminUsage/{usageId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

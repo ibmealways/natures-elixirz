@@ -1,0 +1,129 @@
+.taichi-more-videos {
+  margin-top: 1rem;
+  border: 1px solid rgba(112, 235, 211, 0.22);
+  border-radius: 18px;
+  background: rgba(3, 17, 28, 0.72);
+}
+
+.taichi-more-videos summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 1rem 1.1rem;
+  color: #dffff8;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+
+.taichi-more-videos summary::-webkit-details-marker { display: none; }
+.taichi-more-videos[open] summary {
+  border-bottom: 1px solid rgba(112, 235, 211, 0.14);
+  color: #75ead3;
+}
+
+.taichi-custom-video {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(300px, 1.2fr);
+  gap: 1.2rem;
+  padding: 1.1rem;
+}
+
+.taichi-custom-video strong { color: #effffc; }
+.taichi-custom-video p {
+  margin: 0.4rem 0 0;
+  color: #91aaa5;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.taichi-custom-video form label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: #8bdccc;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.taichi-custom-video form > div { display: flex; gap: 0.55rem; }
+.taichi-finder-controls { margin-bottom: 1rem; align-items: end; }
+.taichi-finder-controls label { align-self: center; margin: 0; }
+.taichi-custom-video input,
+.taichi-custom-video select {
+  min-width: 0;
+  flex: 1;
+  padding: 0.78rem 0.9rem;
+  border: 1px solid rgba(112, 235, 211, 0.25);
+  border-radius: 12px;
+  color: #effffc;
+  background: #030b18;
+}
+
+.taichi-custom-video select { cursor: pointer; }
+
+.taichi-custom-video button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 12px;
+  color: #042019;
+  background: linear-gradient(90deg, #68e5c9, #80dce8);
+  font-weight: 800;
+  cursor: pointer;
+}
+.taichi-custom-video button:disabled { opacity: 0.65; cursor: wait; }
+.taichi-youtube-results {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  gap: 0.55rem !important;
+  margin-top: 0.9rem;
+}
+.taichi-youtube-results article {
+  display: grid;
+  grid-template-columns: 90px minmax(150px, 1fr) auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(112, 235, 211, 0.16);
+  border-radius: 13px;
+  background: rgba(5, 24, 33, 0.88);
+}
+.taichi-youtube-results img { width: 90px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; }
+.taichi-youtube-results article > div { min-width: 0; }
+.taichi-youtube-results strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
+.taichi-youtube-results small { display: block; margin-top: 0.2rem; color: #8ca9a4; }
+.taichi-youtube-results a { color: #a9ded5; text-decoration: none; font-size: 0.72rem; }
+
+.taichi-custom-video .taichi-custom-video-error { color: #ffc48f; }
+.taichi-finder-youtube {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid rgba(112, 235, 211, 0.24);
+  border-radius: 12px;
+  color: #b9e7df;
+  text-decoration: none;
+}
+.taichi-finder-youtube:hover { border-color: #75ead3; color: #fff; }
+.taichi-custom-video input:focus-visible,
+.taichi-custom-video select:focus-visible,
+.taichi-more-videos summary:focus-visible,
+.taichi-custom-video button:focus-visible {
+  outline: 2px solid #75ead3;
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .taichi-custom-video { grid-template-columns: 1fr; }
+  .taichi-custom-video form > div { flex-direction: column; }
+  .taichi-finder-controls { align-items: stretch; }
+  .taichi-youtube-results article { grid-template-columns: 76px 1fr; }
+  .taichi-youtube-results img { width: 76px; }
+}

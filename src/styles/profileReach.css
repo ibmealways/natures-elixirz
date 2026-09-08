@@ -1,0 +1,4 @@
+.reach-privacy { display: flex; align-items: flex-start; gap: .85rem; margin-bottom: 1rem; padding: 1rem 1.15rem; border: 1px solid rgba(94,234,212,.2); border-radius: 15px; background: rgba(13,148,136,.07); color: #a9bdb6; }
+.reach-privacy > svg { flex: 0 0 auto; color: #5eead4; }
+.reach-privacy strong { color: #d9fff5; }
+.reach-privacy p { margin-top: .25rem; line-height: 1.55; font-size: .78rem; }

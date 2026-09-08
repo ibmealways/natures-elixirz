@@ -1,6 +1,7 @@
 // src/context/MRVIContext.jsx
-import React, { createContext, useContext, useMemo, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { evaluateMRVI } from "../utilities/mrviEngine";
+import { useAuth } from "./AuthContext";
 import {
   getMRVIProfile,
   saveMRVIProfile,
@@ -13,22 +14,31 @@ import {
 const MRVIContext = createContext(null);
 
 export function MRVIProvider({ children }) {
-  const [profile, setProfile] = useState(() => getMRVIProfile());
+  const { user, loading } = useAuth();
+  const storageScope = user?.uid || "guest";
+  const [profile, setProfile] = useState(() => getMRVIProfile("guest"));
 
-  const refresh = useCallback(() => setProfile(getMRVIProfile()), []);
+  const refresh = useCallback(() => setProfile(getMRVIProfile(storageScope)), [storageScope]);
+  useEffect(() => {
+    if (!loading) refresh();
+  }, [loading, refresh]);
+  useEffect(() => {
+    window.addEventListener("naturesElixirz:movement-restored", refresh);
+    return () => window.removeEventListener("naturesElixirz:movement-restored", refresh);
+  }, [refresh]);
 
   const giveConsent = useCallback((consent) => {
-    setMRVIConsent(consent);
+    setMRVIConsent(consent, storageScope);
     refresh();
-  }, [refresh]);
+  }, [refresh, storageScope]);
 
   const setBaseline = useCallback((baselineMetrics) => {
-    setMRVIBaseline(baselineMetrics);
+    setMRVIBaseline(baselineMetrics, storageScope);
     refresh();
-  }, [refresh]);
+  }, [refresh, storageScope]);
 
   const addScanFromMetrics = useCallback((metrics) => {
-    const p = getMRVIProfile();
+    const p = getMRVIProfile(storageScope);
     const timestamp = new Date().toISOString();
 
     if (!p.consent) {
@@ -44,10 +54,10 @@ export function MRVIProvider({ children }) {
         energyFlow: 1,
         smoothness: 1,
         ...metrics,
-      });
+      }, storageScope);
     }
 
-    const latestProfile = getMRVIProfile();
+    const latestProfile = getMRVIProfile(storageScope);
     const baseline = latestProfile.baseline;
 
     const history = (latestProfile.scans || []).map((s) => ({
@@ -62,22 +72,22 @@ export function MRVIProvider({ children }) {
       history,
     });
 
-    addMRVIScan({ timestamp, metrics, output });
+    addMRVIScan({ timestamp, metrics, output }, storageScope);
     refresh();
     return output;
-  }, [refresh]);
+  }, [refresh, storageScope]);
 
   const setSettings = useCallback((settingsPatch) => {
-    const p = getMRVIProfile();
+    const p = getMRVIProfile(storageScope);
     p.settings = { ...(p.settings || {}), ...(settingsPatch || {}) };
-    saveMRVIProfile(p);
+    saveMRVIProfile(p, storageScope);
     refresh();
-  }, [refresh]);
+  }, [refresh, storageScope]);
 
   const resetAll = useCallback(() => {
-    resetMRVIProfile();
+    resetMRVIProfile(storageScope);
     refresh();
-  }, [refresh]);
+  }, [refresh, storageScope]);
 
   const latestScan = useMemo(() => {
     const scans = profile?.scans || [];

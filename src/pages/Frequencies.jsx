@@ -1,350 +1,634 @@
-// ===========================================================
-// Frequencies.jsx — PREMIUM COSMIC EDITION
-// Unified UI • GlowNav Only • Full EarthSync Chamber System
-// ===========================================================
-
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  AudioLines,
+  Headphones,
+  LockKeyhole,
+  Pause,
+  Play,
+  Radio,
+  Save,
+  Sparkles,
+  Timer,
+  Waves,
+  Youtube,
+} from "lucide-react";
 import GlowNav from "../components/GlowNav";
-import "../styles/frequencies.css";
-import "../styles/CosmicShell.css"; // premium-shell background
+import InAppYouTubePlayer from "../components/InAppYouTubePlayer";
+import KernelFeedbackContract from "../components/KernelFeedbackContract";
+import TierPreviewBanner, {
+  useKernelAccess,
+} from "../components/TierPreviewBanner";
+import {
+  getMovementContinuation,
+  recordFrequencyJourney,
+} from "../utilities/wellnessJourney";
+import { useAuth } from "../context/AuthContext";
+import {
+  buildKernelBrief,
+  publishWellnessSignal,
+} from "../utilities/wellnessExchange";
+import { getFrequencyVideoId } from "../utilities/frequencyVideos";
+import "../styles/CosmicShell.css";
+import "../styles/frequencyExperience.css";
+
+const frequencies = [
+  {
+    hz: 174,
+    title: "Grounding",
+    plane: "Ember Root Plane",
+    realm: "ember",
+    goals: ["painSupport", "inflammation"],
+    note: "A low-tone relaxation pairing for a slow recovery ritual.",
+    experience: "Low, steady, and anchored",
+  },
+  {
+    hz: 285,
+    title: "Restore",
+    plane: "Amber Crystal Garden",
+    realm: "amber",
+    goals: ["painSupport"],
+    note: "A contemplative tone traditionally used in wellness playlists.",
+    experience: "Warm, spacious, and reflective",
+  },
+  {
+    hz: 396,
+    title: "Release",
+    plane: "Violet Release Nebula",
+    realm: "violet",
+    goals: ["calm", "digestion"],
+    note: "A lower listening option for breathwork and unwinding.",
+    experience: "Soft, spacious, and exhaling",
+  },
+  {
+    hz: 432,
+    title: "Earth Flow",
+    plane: "Verdant Earth Haven",
+    realm: "verdant",
+    goals: ["heart", "general"],
+    note: "A popular alternate tuning used for gentle ambient listening.",
+    experience: "Natural, flowing, and familiar",
+  },
+  {
+    hz: 528,
+    title: "Bright Focus",
+    plane: "Solar Focus Citadel",
+    realm: "solar",
+    goals: ["energy", "focus"],
+    note: "A brighter tone pairing for a focused smoothie-making session.",
+    experience: "Bright, alert, and intentional",
+  },
+  {
+    hz: 639,
+    title: "Connection",
+    plane: "Rosewater Bridge",
+    realm: "rose",
+    goals: ["heart", "calm"],
+    note: "A midrange tone for reflective or social wellness rituals.",
+    experience: "Open, warm, and connected",
+  },
+  {
+    hz: 741,
+    title: "Clarity",
+    plane: "Azure Clarity Spires",
+    realm: "azure",
+    goals: ["focus"],
+    note: "A higher tone option for a short clarity and attention ritual.",
+    experience: "Crisp, light, and attentive",
+  },
+  {
+    hz: 852,
+    title: "Intuition",
+    plane: "Indigo Reflection Moon",
+    realm: "indigo",
+    goals: ["mindfulness"],
+    note: "A symbolic spiritual pairing for meditation and self-reflection.",
+    experience: "Quiet, inward, and symbolic",
+  },
+  {
+    hz: 963,
+    title: "Crown Meditation",
+    plane: "Luminous Summit",
+    realm: "luminous",
+    goals: ["mindfulness"],
+    note: "A very high symbolic meditation tone; keep preview volume low.",
+    experience: "Airy, minimal, and contemplative",
+  },
+];
+
+const extendedFrequencies = [
+  {
+    hz: 40,
+    title: "Low Focus Pulse",
+    plane: "Deep Focus Chamber",
+    realm: "azure",
+    goals: ["focus"],
+    note: "A very low audible tone for optional focused listening. Research on 40 Hz sensory stimulation is still developing and this preview is not treatment.",
+    experience: "Low, steady, and minimal",
+  },
+  {
+    hz: 128,
+    title: "Quiet Foundation",
+    plane: "Stillwater Foundation",
+    realm: "verdant",
+    goals: ["calm"],
+    note: "A low musical reference tone for quiet breathing, reflection, or gentle ambient listening.",
+    experience: "Deep, calm, and unhurried",
+  },
+  {
+    hz: 136,
+    title: "Earth-Year Tone",
+    plane: "Earth Orbit Sanctuary",
+    realm: "ember",
+    goals: ["mindfulness"],
+    note: "An approximately 136.1 Hz tone sometimes used in meditative music and sound traditions.",
+    experience: "Earthy, resonant, and contemplative",
+  },
+  {
+    hz: 256,
+    title: "Middle C Resonance",
+    plane: "Harmonic Compass",
+    realm: "amber",
+    goals: ["general"],
+    note: "A scientific-pitch reference for middle C, useful as a simple musical listening anchor.",
+    experience: "Balanced, musical, and centered",
+  },
+  {
+    hz: 417,
+    title: "Transition",
+    plane: "Copper Passage",
+    realm: "rose",
+    goals: ["calm"],
+    note: "A popular symbolic playlist frequency for transition rituals and reflective listening.",
+    experience: "Warm, changing, and reflective",
+  },
+  {
+    hz: 440,
+    title: "Concert Pitch",
+    plane: "Orchestral Beacon",
+    realm: "solar",
+    goals: ["focus", "general"],
+    note: "The common A4 tuning reference used by many modern instruments and ensembles.",
+    experience: "Clear, familiar, and musical",
+  },
+  {
+    hz: 723,
+    title: "July 23 Signature Tone",
+    plane: "Founder’s Birthday Star",
+    realm: "luminous",
+    goals: ["mindfulness", "general"],
+    note: "Nature’s Elixirz founder signature tone, inspired by the July 23 birthday date. It is a personal and symbolic listening choice rather than a medical frequency.",
+    experience: "Personal, celebratory, and luminous",
+  },
+  {
+    hz: 888,
+    title: "Octave Reflection",
+    plane: "Infinite Mirror",
+    realm: "indigo",
+    goals: ["mindfulness"],
+    note: "A high symbolic tone for short meditation or reflection; begin at a very low volume.",
+    experience: "Bright, spacious, and symbolic",
+  },
+  ...[1111, 2222, 3333, 4444, 5555].map((hz, index) => ({
+    hz,
+    title: `${String(index + 1).repeat(4)} Symbolic Tone`,
+    plane: `Number Path ${String(index + 1).padStart(2, "0")}`,
+    realm: ["luminous", "azure", "violet", "rose", "solar"][index],
+    goals: ["mindfulness"],
+    note: `${hz} Hz is offered as a symbolic listening choice. Repeating-number traditions are cultural or spiritual interpretations, not established medical effects.`,
+    experience: "High, brief, and symbolic",
+  })),
+];
+
+const allFrequencies = [...frequencies, ...extendedFrequencies];
+
+const emotionalWellnessPairings = [
+  { key: "anxious-moment", label: "Anxious-moment support", hz: 396, title: "Grounded Exhale", note: "A gentle listening ritual for slowing down, breathing comfortably, and finding a steadier point of attention." },
+  { key: "low-mood", label: "Low-mood support", hz: 432, title: "Gentle Uplift", note: "A familiar ambient tuning for pairing with daylight, hydration, movement, or supportive connection." },
+  { key: "racing-mind", label: "Calming a racing mind", hz: 128, title: "Quiet Mind Anchor", note: "A low, unhurried tone intended to accompany slow breathing and a simple return to the present moment." },
+  { key: "stress", label: "Stress support", hz: 417, title: "Unwind and Release", note: "A warm reflective listening choice for transitioning out of a demanding part of the day." },
+  { key: "grounding", label: "Grounding and emotional reset", hz: 174, title: "Steady Ground", note: "A low-tone option for a brief seated grounding ritual at a comfortable volume." },
+  { key: "sleep", label: "Evening wind-down", hz: 256, title: "Rest Preparation", note: "A balanced musical anchor for a quiet, screen-light evening routine before sleep." },
+  { key: "focus", label: "Overwhelm and focus support", hz: 741, title: "One-Thing Clarity", note: "A short listening cue for reducing distractions and choosing one manageable next step." },
+];
+
+function readStoredJson(key) {
+  for (const storage of [sessionStorage, localStorage]) {
+    try {
+      const raw = storage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser sessions.
+    }
+  }
+  return null;
+}
+
+function readStoredValue(key) {
+  for (const storage of [sessionStorage, localStorage]) {
+    try {
+      const value = storage.getItem(key);
+      if (value) return value;
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser sessions.
+    }
+  }
+  return "";
+}
 
 export default function Frequencies() {
-  const [isChamberOpen, setIsChamberOpen] = useState(false);
+  const { user } = useAuth();
+  const storageScope = user?.uid || "guest";
+  const unlocked = useKernelAccess("frequencies");
+  const [params] = useSearchParams();
+  const source = params.get("source") || "frequency";
+  const smoothieContext = readStoredJson("naturesElixirz.latestSmoothieContext") || {};
+  const movement = getMovementContinuation(storageScope) || {};
+  const goal =
+    params.get("goal") ||
+    smoothieContext.goal ||
+    movement.goal ||
+    readStoredValue("naturesElixirz.latestSmoothieGoal") ||
+    "general";
+  const recommended =
+    frequencies.find((frequency) => frequency.goals.includes(goal)) ||
+    frequencies.find((frequency) => frequency.hz === movement.frequencyHz) ||
+    frequencies[3];
+  const requestedHz = Number(params.get("hz"));
+  const rememberedHz = Number(
+    buildKernelBrief(storageScope, "frequency")
+      .kernelMemory?.selections?.at(-1)
+      ?.match(/\d+/)?.[0],
+  );
+  const [selected, setSelected] = useState(
+    allFrequencies.find((frequency) => frequency.hz === requestedHz) ||
+      allFrequencies.find((frequency) => frequency.hz === rememberedHz) ||
+      recommended,
+  );
+  const [playing, setPlaying] = useState(false);
+  const [memberMessage, setMemberMessage] = useState("");
+  const [videoOpen, setVideoOpen] = useState(false);
+  const audioRef = useRef(null);
+  const timerRef = useRef(null);
+  const durationRef = useRef(60);
 
-  const openChamber = () => setIsChamberOpen(true);
-  const closeChamber = () => setIsChamberOpen(false);
+  const stop = () => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    if (audioRef.current) audioRef.current.close();
+    timerRef.current = null;
+    audioRef.current = null;
+    setPlaying(false);
+  };
+  const play = async (durationSeconds = 300) => {
+    stop();
+    durationRef.current = durationSeconds;
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return;
+    const context = new Context();
+    const gain = context.createGain();
+    const primary = context.createOscillator();
+    const undertone = context.createOscillator();
+    primary.type = "sine";
+    undertone.type = "sine";
+    primary.frequency.value = selected.hz;
+    undertone.frequency.value = selected.hz / 2;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.025, context.currentTime + 1);
+    gain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      context.currentTime + Math.max(2, durationSeconds - 1),
+    );
+    primary.connect(gain);
+    undertone.connect(gain);
+    gain.connect(context.destination);
+    primary.start();
+    undertone.start();
+    primary.stop(context.currentTime + durationSeconds);
+    undertone.stop(context.currentTime + durationSeconds);
+    audioRef.current = context;
+    recordFrequencyJourney(selected.hz, goal, storageScope);
+    publishWellnessSignal(storageScope, "frequency", {
+      goal,
+      selection: `${selected.hz} Hz`,
+    });
+    setPlaying(true);
+    timerRef.current = window.setTimeout(stop, durationSeconds * 1000);
+  };
+  useEffect(() => () => stop(), []);
+  useEffect(() => {
+    if (playing) play(durationRef.current);
+  }, [selected]);
+
+  const selectedVideoId = getFrequencyVideoId(selected.hz);
+
+  useEffect(() => {
+    const context = {
+      hz: selected.hz,
+      title: selected.title,
+      goal,
+      source,
+      smoothieRecipeName: smoothieContext.recipeName || "",
+      updatedAt: new Date().toISOString(),
+    };
+    for (const storage of [sessionStorage, localStorage]) {
+      try { storage.setItem("naturesElixirz.latestFrequencyContext", JSON.stringify(context)); } catch {}
+    }
+  }, [goal, selected.hz, selected.title, smoothieContext.recipeName, source]);
 
   return (
-    <div className="cosmic-page-shell">
-
-      {/* PREMIUM NAVIGATION */}
+    <div
+      className={`cosmic-page-shell resonate-cosmos realm-${selected.realm}`}
+    >
       <GlowNav />
-
-      {/* MAIN PAGE WRAPPER */}
-      <div className="cosmic-frequency-page">
-        <div className="frequency-bg-layer" />
-        <div className="frequency-bg-noise" />
-        <div className="cosmic-aurora-layer" />
-        <div className="cosmic-particles-layer" />
-
-        {/* ===========================
-            MAIN CONTENT
-        ============================ */}
-        <main className="frequency-lab-container frequency-full-wrapper">
-
-          {/* HERO SECTION */}
-          <section className="fade-section mb-12 px-4 md:px-6">
-            <div className="max-w-5xl mx-auto text-center">
-
-              <h1 className="frequency-section-title mb-4 hologram-text">
-                Vibrational Frequency Lab
-              </h1>
-
-              <p className="frequency-section-subtitle">
-                Synchronize your field with the  
-                <span className="text-emerald-300 font-semibold"> 432 Hz Galactic Core </span>  
-                and the  
-                <span className="text-sky-300 font-semibold"> EarthSync Hybrid Reactor</span>.  
-                Recalibrate your energy. Expand your blueprint.
+      <main className="frequency-preview-page">
+        <header className="resonate-hero">
+          <div className="resonate-hero-copy">
+            <div>
+              <p className="ne-kicker">
+                <Sparkles size={14} /> Tier 2 · Resonate Observatory
               </p>
-
-              <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-5">
-                <button
-                  type="button"
-                  onClick={openChamber}
-                  className="chamber-launch-btn"
-                >
-                  Enter 432 Hz Chamber
-                </button>
-
-                <p className="max-w-xs text-sm text-slate-200/90">
-                  Activate body–aura–mind coherence with one session.
-                </p>
-              </div>
-
+              <h1>
+                Choose Your <em>Astroplane.</em>
+              </h1>
             </div>
-          </section>
-
-          {/* ===========================
-              CORE GRID: ORB + TRACK CARD
-          ============================ */}
-          <section className="fade-section px-4 md:px-6 mb-14">
-            <div className="max-w-6xl mx-auto grid gap-8 md:grid-cols-[1fr_1.3fr] items-start">
-
-              {/* LEFT: MINI ORB + VISUALIZER */}
-              <div className="relative flex flex-col items-center gap-6">
-
-                {/* ORBITAL RINGS */}
-                <div className="chamber-page-inner">
-                  <div className="chamber-page-ring" />
-                  <div className="chamber-page-ring chamber-page-ring-2" />
-
-                  {/* MINI GALACTIC ORB */}
-                  <div className="chamber-orb-shell">
-                    <div className="earthsync-ring" />
-                    <div className="chamber-aura-ring chamber-aura-ring-outer" />
-                    <div className="chamber-aura-ring chamber-aura-ring-inner" />
-
-                    <div className="chamber-orb-core">
-                      <div className="chamber-orb-label">Active Field</div>
-                      <div className="chamber-orb-frequency">432 Hz</div>
-                      <div className="chamber-orb-caption">Core Healing Tone</div>
-                      <div className="chamber-earthsync-tag">EarthSync Reactor</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 chamber-triple-stack">
-                    <span className="chamber-chip chip-body">Body · 432 Hz</span>
-                    <span className="chamber-chip chip-aura">Aura · 439 Hz</span>
-                    <span className="chamber-chip chip-mind">Mind · 443 Hz</span>
-                  </div>
-                </div>
-
-                {/* VISUALIZER */}
-                <div className="visualizer-container w-full max-w-md">
-                  <div className="visualizer-header">
-                    <span className="visualizer-label">Omni-Field Visualizer</span>
-                    <span className="visualizer-mode">Body • Aura • Mind</span>
-                  </div>
-
-                  <div className="frequency-visualizer-shell frequency-visualizer-playing">
-                    <div className="frequency-visualizer">
-                      {Array.from({ length: 48 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="frequency-bar frequency-bar-active"
-                          style={{ animationDelay: `${(i % 8) * 0.07}s` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="visualizer-footer">
-                    <span className="visualizer-band visualizer-band-low">LOW · BODY</span>
-                    <span className="visualizer-band visualizer-band-mid">MID · AURA</span>
-                    <span className="visualizer-band visualizer-band-high">HIGH · MIND</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT: TRACK CARD */}
-              <div className="frequency-card p-6">
-                <div className="chamber-track-label">Active Track</div>
-                <h2 className="chamber-track-title">432 Hz • Auto-Matched</h2>
-
-                <p className="chamber-track-desc mb-4">
-                  Tuned for grounding, nervous system stabilizing, and  
-                  <span className="text-emerald-300 font-semibold"> heart field coherence</span>.
-                </p>
-
-                <div className="flex flex-wrap gap-2 mb-5">
-                  <span className="chamber-chip chip-body">Grounding</span>
-                  <span className="chamber-chip chip-aura">Nervous System</span>
-                  <span className="chamber-chip chip-mind">Heart Field</span>
-                </div>
-
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-300">
-                  Listen on
-                </p>
-
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <a className="platform-pill youtube-pill">YT</a>
-                  <a className="platform-pill spotify-pill">Spotify</a>
-                  <a className="platform-pill apple-pill">Apple</a>
-                  <a className="platform-pill amazon-pill">Amazon</a>
-                </div>
-
-                {/* LEVEL SELECTOR */}
-                <div className="chamber-levels mt-6">
-                  <div className="chamber-levels-label">
-                    Session Intensity · EarthSync Field
-                  </div>
-
-                  <div className="chamber-level-pill-row">
-                    <button className="chamber-level-pill chamber-level-pill-active">
-                      <span>Level 1</span> Core
-                    </button>
-                    <button className="chamber-level-pill">
-                      <span>Level 2</span> Deep Calm
-                    </button>
-                    <button className="chamber-level-pill">
-                      <span>Level 3</span> Cellular
-                    </button>
-                    <button className="chamber-level-pill chip-vortex">
-                      <span>EarthSync</span> Auto
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-
-        {/* ===========================
-            FULL-SCREEN EARTHSYNC CHAMBER
-        ============================ */}
-        {isChamberOpen && (
-          <div className="frequency-chamber-screen earthsync-bg">
-            <div className="frequency-chamber-dark-overlay" />
-            <div className="cosmic-particles" />
-
-            <button className="chamber-exit-btn" onClick={closeChamber}>
-              ✕
-            </button>
-
-            <div className="chamber-inner">
-
-              {/* HEADER */}
-              <header className="chamber-header mb-8">
-                <p className="chamber-kicker">Level 1 • Core Field</p>
-                <h2 className="chamber-title">432 Hz Galactic Chamber</h2>
-
-                <p className="chamber-subtitle">
-                  Let your field align with the  
-                  <span className="chamber-subtitle-strong"> EarthSync Reactor </span>  
-                  for nervous system reset and heart–mind coherence.
-                </p>
-              </header>
-
-              {/* MAIN GRID */}
-              <div className="chamber-main-grid">
-                
-                {/* ORB PANEL */}
-                <div className="chamber-orb-panel">
-                  <div className="chamber-orb-shell">
-                    <div className="earthsync-ring" />
-                    <div className="chamber-vortex-ring chamber-vortex-ring-outer" />
-                    <div className="chamber-vortex-ring chamber-vortex-ring-inner" />
-                    <div className="chamber-aura-ring chamber-aura-ring-outer" />
-                    <div className="chamber-aura-ring chamber-aura-ring-inner" />
-
-                    <div className="chamber-orb-core">
-                      <div className="chamber-orb-label">Core Field Active</div>
-                      <div className="chamber-orb-frequency">432 Hz</div>
-                      <div className="chamber-orb-caption">
-                        Chamber stabilized • resonance optimal
-                      </div>
-                      <div className="chamber-earthsync-tag">
-                        EarthSync • Nature’s Elixirz
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="chamber-triple-stack mt-4">
-                    <span className="chamber-chip chip-body">Body · 432 Hz</span>
-                    <span className="chamber-chip chip-aura">Aura · 439 Hz</span>
-                    <span className="chamber-chip chip-mind">Mind · 443 Hz</span>
-                  </div>
-                </div>
-
-                {/* CONTROL PANEL */}
-                <div className="chamber-controls-panel">
-
-                  {/* TRACK CARD */}
-                  <div className="chamber-track-card mb-8">
-                    <div className="chamber-track-label">Current Session</div>
-                    <div className="chamber-track-title">
-                      432 Hz • Auto-Matched
-                    </div>
-
-                    <p className="chamber-track-desc">
-                      Designed for grounding, calm, and heart expansion.
-                    </p>
-
-                    <div className="chamber-streaming-row mt-4">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-300">
-                        Listen on
-                      </p>
-
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <a className="platform-pill youtube-pill">YouTube</a>
-                        <a className="platform-pill spotify-pill">Spotify</a>
-                        <a className="platform-pill apple-pill">Apple</a>
-                        <a className="platform-pill amazon-pill">Amazon</a>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SESSION TIMER */}
-                  <div className="chamber-card">
-                    <div className="chamber-card-header">
-                      <h4>Session Timer</h4>
-                      <span className="chamber-card-tag">EarthSync Flow</span>
-                    </div>
-
-                    <p className="chamber-card-text">
-                      For full recalibration, 22–33 minutes optimizes your biological field.
-                    </p>
-
-                    <div className="flex flex-col md:flex-row gap-6 mt-4">
-                      <div className="timer-orbit-shell">
-                        <div className="timer-orbit timer-orbit-outer" />
-                        <div className="timer-orbit timer-orbit-middle" />
-                        <div className="timer-orbit timer-orbit-inner" />
-
-                        <div className="timer-core">
-                          <div className="timer-time">22:00</div>
-                          <div className="timer-caption">
-                            Suggested EarthSync Window
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 flex flex-col gap-4">
-
-                        {/* SLIDER */}
-                        <div className="chamber-slider-row">
-                          <div className="chamber-mini-label">Duration</div>
-                          <input type="range" min="7" max="44" defaultValue="22" className="chamber-slider" />
-                          <div className="chamber-slider-meta">
-                            <span>7m reset</span>
-                            <span>22m deep</span>
-                            <span>44m immersion</span>
-                          </div>
-                        </div>
-
-                        {/* AI SETTINGS */}
-                        <div className="chamber-ai-grid">
-                          <div>
-                            <div className="chamber-mini-label">Goal Focus</div>
-                            <select className="chamber-select">
-                              <option>Grounding + Calm</option>
-                              <option>Healing + Recovery</option>
-                              <option>Focus + Creativity</option>
-                              <option>Sleep + Restoration</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <div className="chamber-mini-label">EarthSync Smart Mode</div>
-                            <select className="chamber-select">
-                              <option>Auto-tune to my field</option>
-                              <option>Keep stable 432 Hz</option>
-                              <option>Slow downward spiral</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="chamber-ai-result">
-                          Session calibrated for <span>deep grounding</span> and{" "}
-                          <span>nervous system reset</span>.
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button className="chamber-close-bottom" onClick={closeChamber}>
-                Close Chamber
-              </button>
+            <div className="resonate-intro">
+              <p>
+                Travel through nine featured realms and an extended tone
+                library. Each option can
+                accompany smoothie preparation, breathwork, meditation, or
+                reflection—never medical treatment.
+              </p>
+              <a href="#astroplane-atlas">
+                Enter the observatory <span>↓</span>
+              </a>
             </div>
           </div>
-        )}
+          <div
+            className="resonate-hero-art"
+            role="img"
+            aria-label="Celestial observatory surrounded by nine colorful floating astroplanes"
+          >
+            <span>
+              <Radio size={15} /> {allFrequencies.length} tones online
+            </span>
+          </div>
+        </header>
 
-      </div>
+        <TierPreviewBanner minimum={1} kernel="frequencies">
+          Travel through every astroplane and hear short tone previews. Members
+          unlock full sessions, playlists, timers, and history.
+        </TierPreviewBanner>
+
+        <section className={`frequency-pairing plane-stage ${selected.realm}`}>
+          <div className="plane-visual">
+            <div className="frequency-orb">
+              <i />
+              <i />
+              <span>
+                {selected.hz}
+                <small>Hz</small>
+              </span>
+            </div>
+            <div className="waveform" aria-hidden="true">
+              {Array.from({ length: 28 }, (_, index) => (
+                <b
+                  key={index}
+                  style={{
+                    "--wave": `${22 + ((index * 17) % 66)}%`,
+                    "--delay": `${index * -0.07}s`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="plane-copy">
+            <p className="ne-kicker">Now orbiting · {selected.plane}</p>
+            <h2>{selected.title}</h2>
+            <span className="plane-feeling">{selected.experience}</span>
+            <p>{selected.note}</p>
+            <div className="smoothie-pairing">
+              <GlassPairing />
+              <span>
+                <small>Your smoothie + listening alignment</small>
+                <strong>{selected.hz} Hz · {selected.title} pairs with the selected video</strong>
+              </span>
+            </div>
+            <div className="frequency-actions">
+              <button onClick={playing ? stop : () => play(60)}>
+                {playing ? <Pause size={17} /> : <Play size={17} />}
+                {playing ? "Stop transmission" : "Play 60-second preview"}
+              </button>
+              <button
+                type="button"
+                disabled={!selectedVideoId}
+                title={
+                  selectedVideoId
+                    ? "Open the matching ambient video"
+                    : "No verified matching video is assigned to this tone"
+                }
+                onClick={() => {
+                  stop();
+                  setVideoOpen(true);
+                }}
+              >
+                <Youtube size={17} />
+                {selectedVideoId
+                  ? "Watch frequency video here"
+                  : "Use exact tone preview"}
+              </button>
+              <Link
+                className="frequency-tier-link"
+                to={`/meals?goal=${encodeURIComponent(goal)}&source=frequency`}
+              >
+                Preview Tier 3 meal pairing
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="frequency-selector" id="astroplane-atlas">
+          <div className="atlas-heading">
+            <div>
+              <p className="ne-kicker">Interdimensional atlas</p>
+              <h2>Select a listening realm</h2>
+            </div>
+            <span>Use comfortable volume</span>
+          </div>
+          <div className="astroplane-grid">
+            {frequencies.map((frequency, index) => (
+              <button
+                key={frequency.hz}
+                className={`${frequency.realm} ${selected.hz === frequency.hz ? "active" : ""}`}
+                onClick={() => setSelected(frequency)}
+              >
+                <span className="plane-number">
+                  Plane {String(index + 1).padStart(2, "0")}
+                </span>
+                <i className="mini-planet">
+                  <Waves size={20} />
+                </i>
+                <strong>
+                  {frequency.hz}
+                  <small>Hz</small>
+                </strong>
+                <h3>{frequency.plane}</h3>
+                <p>{frequency.title}</p>
+                {frequency.goals.includes(goal) && (
+                  <em>Aligned with your smoothie</em>
+                )}
+              </button>
+            ))}
+          </div>
+          <details className="extended-frequency-library">
+            <summary>
+              <span>
+                <Waves size={18} /> Explore extended Hz library
+              </span>
+              <small>{extendedFrequencies.length} additional tones</small>
+            </summary>
+            <div className="extended-frequency-controls">
+              <label htmlFor="extended-frequency-select">
+                Choose an additional listening tone
+              </label>
+              <select
+                id="extended-frequency-select"
+                value={
+                  extendedFrequencies.some(({ hz }) => hz === selected.hz)
+                    ? selected.hz
+                    : ""
+                }
+                onChange={(event) => {
+                  const next = extendedFrequencies.find(
+                    ({ hz }) => hz === Number(event.target.value),
+                  );
+                  if (next) setSelected(next);
+                }}
+              >
+                <option value="">Select a frequency...</option>
+                {extendedFrequencies.map((frequency) => (
+                  <option key={frequency.hz} value={frequency.hz}>
+                    {frequency.hz} Hz — {frequency.title}
+                  </option>
+                ))}
+              </select>
+              <p>
+                Repeating-number tones such as 1111 Hz and 2222 Hz are
+                included as symbolic listening preferences. Frequency labels
+                do not establish a medical or healing effect. Keep high tones
+                brief and at a comfortable low volume.
+              </p>
+            </div>
+          </details>
+          <details className="extended-frequency-library emotional-wellness-library">
+            <summary>
+              <span><Sparkles size={18} /> Explore emotional-wellness listening</span>
+              <small>{emotionalWellnessPairings.length} supportive intentions</small>
+            </summary>
+            <div className="extended-frequency-controls">
+              <label htmlFor="emotional-wellness-select">Choose how you would like to feel supported</label>
+              <select id="emotional-wellness-select" defaultValue="" onChange={(event) => {
+                const pairing = emotionalWellnessPairings.find(({ key }) => key === event.target.value);
+                const tone = pairing && allFrequencies.find(({ hz }) => hz === pairing.hz);
+                if (pairing && tone) setSelected({ ...tone, title: pairing.title, note: pairing.note, emotionalIntention: pairing.label });
+              }}>
+                <option value="">Select an intention...</option>
+                {emotionalWellnessPairings.map((pairing) => <option key={pairing.key} value={pairing.key}>{pairing.label} — {pairing.hz} Hz</option>)}
+              </select>
+              <p>These are optional sound-and-reflection pairings for emotional wellness. They do not treat anxiety, depression, trauma, or another mental-health condition. If distress is persistent, worsening, or feels unsafe, connect with a qualified mental-health professional or crisis service.</p>
+            </div>
+          </details>
+        </section>
+
+        <section className="frequency-member-panel">
+          <div>
+            <p className="ne-kicker">Resonate member console</p>
+            <h2>
+              {unlocked
+                ? "Full session controls unlocked"
+                : "Your full observatory awaits"}
+            </h2>
+            <p>
+              {memberMessage ||
+                (unlocked
+                  ? "Build a listening ritual and keep your journey organized."
+                  : "Preview the controls below. Tier 2 membership unlocks complete sessions and personal listening tools.")}
+            </p>
+          </div>
+          <div className="member-controls">
+            <button
+              disabled={!unlocked}
+              onClick={() => {
+                recordFrequencyJourney(selected.hz, goal, storageScope);
+                publishWellnessSignal(storageScope, "frequency", {
+                  goal,
+                  selection: `${selected.hz} Hz`,
+                });
+                play();
+                setMemberMessage(
+                  `${selected.hz} Hz five-minute session started and connected to your ${goal} journey.`,
+                );
+              }}
+            >
+              <Timer size={18} /> Start 5-minute session
+              {!unlocked && <LockKeyhole size={13} />}
+            </button>
+            <button
+              disabled={!unlocked}
+              onClick={() => {
+                recordFrequencyJourney(selected.hz, goal, storageScope);
+                publishWellnessSignal(storageScope, "frequency", {
+                  goal,
+                  selection: `${selected.hz} Hz`,
+                });
+                setMemberMessage(
+                  `${selected.hz} Hz · ${selected.title} saved as your current resonance pairing.`,
+                );
+              }}
+            >
+              <Save size={18} /> Save pairing
+              {!unlocked && <LockKeyhole size={13} />}
+            </button>
+            <button
+              disabled={!unlocked}
+              onClick={() => {
+                recordFrequencyJourney(selected.hz, goal, storageScope);
+                publishWellnessSignal(storageScope, "frequency", {
+                  goal,
+                  selection: `${selected.hz} Hz`,
+                });
+                setMemberMessage(
+                  "This listening choice is now available to the rest of your wellness journey.",
+                );
+              }}
+            >
+              <Headphones size={18} /> Connect to journey
+              {!unlocked && <LockKeyhole size={13} />}
+            </button>
+          </div>
+        </section>
+        <KernelFeedbackContract kernel="frequency" scope={storageScope} selection={`${selected.hz} Hz · ${selected.title}`} disabled={!unlocked} />
+        <p className="resonate-safety">
+          Frequency labels describe listening experiences and cultural wellness
+          traditions. They do not diagnose, treat, prevent, or cure health
+          conditions.
+        </p>
+        <InAppYouTubePlayer
+          key={selected.hz}
+          open={videoOpen}
+          onClose={() => setVideoOpen(false)}
+          title={`${selected.hz} Hz ambient video library`}
+          videoId={selectedVideoId}
+          note="YouTube content is presented for optional ambient listening. Frequency labels are not medical claims or treatment recommendations."
+        />
+      </main>
     </div>
   );
 }
 
+function GlassPairing() {
+  return (
+    <span className="pairing-glyph" aria-hidden="true">
+      <AudioLines size={21} />
+    </span>
+  );
+}

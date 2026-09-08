@@ -1,0 +1,25 @@
+.active-formula-label-review {
+  margin-top: .85rem;
+  padding: .85rem;
+  border: 1px solid rgba(103, 232, 249, .22);
+  border-radius: 15px;
+  background: radial-gradient(circle at top right, rgba(124, 58, 237, .18), transparent 42%), rgba(2, 12, 23, .72);
+}
+.active-formula-label-review header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .65rem; }
+.active-formula-label-review header div { display: grid; }
+.active-formula-label-review header small { color: #67e8f9; text-transform: uppercase; letter-spacing: .16em; }
+.active-formula-label-review header strong { color: #f0fdfa; }
+.active-formula-label-review header > span { color: #fde68a; font-size: .68rem; }
+.active-formula-label-review > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
+.active-formula-label-review article { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem; border: 1px solid rgba(148, 163, 184, .13); border-radius: 10px; background: rgba(2, 6, 23, .62); }
+.active-formula-label-review article > div { display: grid; min-width: 0; }
+.active-formula-label-review article strong { overflow: hidden; color: #e2e8f0; font-size: .7rem; text-overflow: ellipsis; }
+.active-formula-label-review article small { color: #94a3b8; font-size: .58rem; }
+.active-formula-label-review article > span, .active-formula-label-review article > button { flex: 0 0 auto; padding: .28rem .42rem; border-radius: 999px; font-size: .56rem; }
+.active-formula-label-review .is-matched > span { color: #6ee7b7; background: rgba(16, 185, 129, .13); }
+.active-formula-label-review .needs-label { border-color: rgba(251, 191, 36, .25); }
+.active-formula-label-review .needs-label > button { color: #fde68a; background: rgba(180, 83, 9, .18); }
+.active-formula-label-review .reference-ready > span { color: #a5f3fc; background: rgba(8, 145, 178, .12); }
+.active-formula-label-review > p { margin: .65rem 0 0; color: #94a3b8; font-size: .64rem; }
+@media (max-width: 900px) { .active-formula-label-review > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .active-formula-label-review header { align-items: flex-start; flex-direction: column; } .active-formula-label-review > div { grid-template-columns: 1fr; } }

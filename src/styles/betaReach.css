@@ -1,0 +1,10 @@
+.beta-reach { margin-top: 1rem; padding: 1.3rem; border: 1px solid rgba(104,236,178,.18); border-radius: 22px; background: rgba(2,10,18,.9); }
+.beta-reach h2,.beta-reach h3 { color: #effff8; }
+.beta-reach-note { padding: .8rem; border-radius: 12px; background: rgba(88,229,166,.08); color: #a9beb5; }
+.beta-reach-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: .8rem; }
+.beta-reach-grid article { padding: 1rem; border: 1px solid rgba(255,255,255,.07); border-radius: 14px; }
+.beta-reach-grid ul { list-style: none; padding: 0; }
+.beta-reach-grid li { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; color: #b8cbc3; border-bottom: 1px solid rgba(255,255,255,.06); }
+.beta-reach-grid p,.beta-reach-grid small,.beta-reach .beta-roster-heading>small { color: #81968e; }
+.beta-row { grid-template-columns: 1.5fr .7fr .8fr .8fr .55fr; min-width: 820px; }
+@media(max-width:800px){.beta-reach-grid{grid-template-columns:1fr}}
